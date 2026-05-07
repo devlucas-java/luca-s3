@@ -1,0 +1,62 @@
+version: "3.9"
+
+services:
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    networks:
+      - backend-net
+
+  yugabytedb:
+    image: yugabytedb/yugabyte:latest
+    container_name: yugabytedb
+    ports:
+      - "5433:5433" # YSQL
+      - "9042:9042" # YCQL
+      - "7000:7000" # master UI
+      - "9000:9000" # tserver UI
+    command: >
+      bin/yugabyted start
+      --daemon=false
+    environment:
+      YB_MASTER_ADDRESS: yugabytedb
+    networks:
+      - backend-net
+
+  minio:
+    image: minio/minio
+    container_name: minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: password123
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+    networks:
+      - backend-net
+
+  ffmpeg-worker: # fucure modified to inject with go application
+    image: jrottenberg/ffmpeg:6.1-alpine
+    container_name: ffmpeg-worker
+    volumes:
+      - ./data:/data
+    entrypoint: ["sleep", "infinity"]
+    networks:
+      - backend-net
+
+volumes:
+  minio_data:
+  redis_data:
+
+networks:
+  backend-net:
+    driver: bridge

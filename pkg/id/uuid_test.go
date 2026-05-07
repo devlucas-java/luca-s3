@@ -3,7 +3,7 @@ package id_test
 import (
 	"testing"
 
-	"github.com/devlucas-java/klyp-shop/pkg/id"
+	"github.com/devlucas-java/luca-s3/pkg/id"
 	"github.com/stretchr/testify/assert"
 )
 

@@ -3,7 +3,7 @@ package password_encoder_test
 import (
 	"testing"
 
-	"github.com/devlucas-java/klyp-shop/pkg/password_encoder"
+	"github.com/devlucas-java/luca-s3/pkg/password_encoder"
 	"github.com/stretchr/testify/assert"
 )
 
