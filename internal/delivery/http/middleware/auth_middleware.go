@@ -7,9 +7,9 @@ import (
 	"github.com/devlucas-java/luca-s3/internal/domain/entity"
 	"github.com/devlucas-java/luca-s3/internal/infrastructure/repository"
 	"github.com/devlucas-java/luca-s3/internal/infrastructure/security/jwt"
-	"github.com/devlucas-java/luca-s3/pkg/id"
 	"github.com/devlucas-java/luca-s3/pkg/logger"
 	"github.com/go-chi/jwtauth"
+	"github.com/gocql/gocql"
 )
 
 type contextKey string
@@ -34,7 +34,7 @@ func AuthMiddleware(jwtService *jwt.JWTService, userRepository repository.UserRe
 				http.Error(w, "Invalid token claims", http.StatusUnauthorized)
 				return
 			}
-			userID, err := id.Parse(userIDStr)
+			userID, err := gocql.ParseUUID(userIDStr)
 			if err != nil {
 				http.Error(w, "Invalid duser ID in token", http.StatusUnauthorized)
 				return
