@@ -17,3 +17,7 @@ func Parse(s string) (UUID, error) {
 	}
 	return UUID(id), nil
 }
+
+func IsNil(id UUID) bool {
+	return uuid.UUID(id) == uuid.Nil
+}

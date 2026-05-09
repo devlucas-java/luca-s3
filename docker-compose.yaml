@@ -1,4 +1,4 @@
-version: "3.9"
+version: '3.9'
 
 services:
 
@@ -7,27 +7,39 @@ services:
     container_name: redis
     ports:
       - "6379:6379"
-    command: ["redis-server", "--appendonly", "yes"]
+    command: ["redis-server", "--requirepass", "password", "--appendonly", "yes"]
     volumes:
       - redis_data:/data
     networks:
       - backend-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "password", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
-  yugabytedb:
-    image: yugabytedb/yugabyte:latest
-    container_name: yugabytedb
+  cassandra:
+    image: cassandra:5.0
+    container_name: cassandra
     ports:
-      - "5433:5433" # YSQL
-      - "9042:9042" # YCQL
-      - "7000:7000" # master UI
-      - "9000:9000" # tserver UI
-    command: >
-      bin/yugabyted start
-      --daemon=false
+      - "9042:9042"
     environment:
-      YB_MASTER_ADDRESS: yugabytedb
+      CASSANDRA_CLUSTER_NAME: media-cluster
+      CASSANDRA_DC: dc1
+      CASSANDRA_RACK: rack1
+      # default superuser for cassandra image is cassandra/cassandra
+      CASSANDRA_AUTHENTICATOR: PasswordAuthenticator
+      CASSANDRA_AUTHORIZER: CassandraAuthorizer
+    volumes:
+      - cassandra_data:/var/lib/cassandra
     networks:
       - backend-net
+    healthcheck:
+      test: ["CMD-SHELL", "cqlsh -u cassandra -p cassandra -e 'describe keyspaces' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
 
   minio:
     image: minio/minio
@@ -36,26 +48,46 @@ services:
       - "9000:9000"
       - "9001:9001"
     environment:
-      MINIO_ROOT_USER: admin
-      MINIO_ROOT_PASSWORD: password123
+      MINIO_ROOT_USER: username
+      MINIO_ROOT_PASSWORD: password
     command: server /data --console-address ":9001"
     volumes:
       - minio_data:/data
     networks:
       - backend-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
-  ffmpeg-worker: # fucure modified to inject with go application
-    image: jrottenberg/ffmpeg:6.1-alpine
-    container_name: ffmpeg-worker
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: luca-s3-app
+    ports:
+      - "8080:8080"
+    env_file:
+      - .default.env
+    depends_on:
+      cassandra:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     volumes:
-      - ./data:/data
-    entrypoint: ["sleep", "infinity"]
+      - .:/src
+    working_dir: /src
+    command: sh -c "go build -buildvcs=false -o /app/server ./cmd/server && /app/server"
     networks:
       - backend-net
 
 volumes:
   minio_data:
   redis_data:
+  cassandra_data:
 
 networks:
   backend-net:
