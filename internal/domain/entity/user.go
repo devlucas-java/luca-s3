@@ -1,19 +1,20 @@
 package entity
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/devlucas-java/luca-s3/internal/domain/enums"
-	"github.com/devlucas-java/luca-s3/pkg/id"
 	"github.com/devlucas-java/luca-s3/pkg/password_encoder"
+	"github.com/gocql/gocql"
 )
 
 type User struct {
-	ID       id.UUID `db:"id"`
-	Name     string  `db:"name"`
-	Email    string  `db:"email"`
-	Username string  `db:"username"`
-	Password string  `db:"password"`
+	ID       gocql.UUID `db:"id"`
+	Name     string     `db:"name"`
+	Email    string     `db:"email"`
+	Username string     `db:"username"`
+	Password string     `db:"password"`
 
 	Roles []string `db:"roles"`
 
@@ -27,8 +28,12 @@ func NewUser(name, email, username, pass string) (*User, error) {
 		return nil, err
 	}
 	now := time.Now()
+	uuid, err := gocql.RandomUUID()
+	if err != nil {
+		return nil, fmt.Errorf("failed generate user uuid: %v", err)
+	}
 	return &User{
-		ID:        id.NewUUID(),
+		ID:        uuid,
 		CreatedAt: now,
 		UpdatedAt: now,
 		Name:      name,
