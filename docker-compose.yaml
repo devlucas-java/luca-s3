@@ -27,7 +27,6 @@ services:
       CASSANDRA_CLUSTER_NAME: media-cluster
       CASSANDRA_DC: dc1
       CASSANDRA_RACK: rack1
-      # default superuser for cassandra image is cassandra/cassandra
       CASSANDRA_AUTHENTICATOR: PasswordAuthenticator
       CASSANDRA_AUTHORIZER: CassandraAuthorizer
     volumes:
@@ -50,6 +49,9 @@ services:
     environment:
       MINIO_ROOT_USER: username
       MINIO_ROOT_PASSWORD: password
+      MINIO_API_CORS_ALLOW_ORIGIN: "*"
+      MINIO_BUCKET_NAME: luca-s3
+
     command: server /data --console-address ":9001"
     volumes:
       - minio_data:/data
@@ -60,6 +62,19 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+nginx:
+  image: nginx:alpine
+  container_name: nginx
+  ports:
+    - "80:80"
+  volumes:
+    - ./nginx.conf:/etc/nginx/nginx.conf:ro
+  depends_on:
+    - app
+    - minio
+  networks:
+    - backend-net
 
   app:
     build:
