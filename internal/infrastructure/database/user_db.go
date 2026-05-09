@@ -4,11 +4,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gocql/gocql"
-
 	"github.com/devlucas-java/luca-s3/internal/domain/entity"
 	"github.com/devlucas-java/luca-s3/internal/infrastructure/repository"
-	"github.com/devlucas-java/luca-s3/pkg/id"
+	"github.com/devlucas-java/luca-s3/pkg/pagination"
+	"github.com/gocql/gocql"
 )
 
 type UserDB struct {
@@ -19,63 +18,29 @@ func NewUserDB(session *gocql.Session) repository.UserRepository {
 	return &UserDB{session: session}
 }
 
-// scanUser reads a full user row from a gocql.Scanner into an entity.User.
-func scanUser(scan func(...interface{}) error) (*entity.User, error) {
-	var (
-		cassandraID gocql.UUID
-		name        string
-		email       string
-		username    string
-		password    string
-		roles       []string
-		createdAt   time.Time
-		updatedAt   time.Time
-	)
-
-	if err := scan(&cassandraID, &name, &email, &username, &password, &roles, &createdAt, &updatedAt); err != nil {
-		return nil, err
-	}
-
-	userID, err := id.Parse(cassandraID.String())
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse user id: %w", err)
-	}
-
-	return &entity.User{
-		ID:        userID,
-		Name:      name,
-		Email:     email,
-		Username:  username,
-		Password:  password,
-		Roles:     roles,
-		CreatedAt: createdAt,
-		UpdatedAt: updatedAt,
-	}, nil
-}
-
-// Create inserts a new user and returns the persisted entity.
 func (u *UserDB) Create(user *entity.User) (*entity.User, error) {
 	if user == nil {
 		return nil, fmt.Errorf("user is nil")
 	}
 
-	if id.IsNil(user.ID) {
-		user.ID = id.NewUUID()
+	if user.ID == (gocql.UUID{}) {
+		uuid, err := gocql.RandomUUID()
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate user uuid: %w", err)
+		}
+		user.ID = uuid
 	}
 
 	now := time.Now()
-	if user.CreatedAt.IsZero() {
-		user.CreatedAt = now
-	}
-	if user.UpdatedAt.IsZero() {
-		user.UpdatedAt = now
-	}
+	user.CreatedAt = now
+	user.UpdatedAt = now
 
-	const query = `INSERT INTO users (id, name, email, username, password, roles, created_at, updated_at)
-	               VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+	const query = `
+		INSERT INTO users (id, name, email, username, password, roles, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
 
 	if err := u.session.Query(query,
-		gocql.UUID(user.ID),
+		user.ID,
 		user.Name,
 		user.Email,
 		user.Username,
@@ -90,14 +55,13 @@ func (u *UserDB) Create(user *entity.User) (*entity.User, error) {
 	return user, nil
 }
 
-// Save is an upsert — inserts or fully replaces the user row.
 func (u *UserDB) Save(user *entity.User) (*entity.User, error) {
 	if user == nil {
 		return nil, fmt.Errorf("user is nil")
 	}
 
-	if id.IsNil(user.ID) {
-		user.ID = id.NewUUID()
+	if user.ID == (gocql.UUID{}) {
+		return nil, fmt.Errorf("user id is required for save")
 	}
 
 	now := time.Now()
@@ -106,12 +70,12 @@ func (u *UserDB) Save(user *entity.User) (*entity.User, error) {
 	}
 	user.UpdatedAt = now
 
-	// INSERT in Cassandra is naturally an upsert (LWT not needed here)
-	const query = `INSERT INTO users (id, name, email, username, password, roles, created_at, updated_at)
-	               VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+	const query = `
+		INSERT INTO users (id, name, email, username, password, roles, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
 
 	if err := u.session.Query(query,
-		gocql.UUID(user.ID),
+		user.ID,
 		user.Name,
 		user.Email,
 		user.Username,
@@ -126,21 +90,18 @@ func (u *UserDB) Save(user *entity.User) (*entity.User, error) {
 	return user, nil
 }
 
-// Updates applies a partial update — only non-zero fields are written.
-// Fields left at their zero value are kept as-is in the database.
 func (u *UserDB) Updates(user *entity.User) (*entity.User, error) {
 	if user == nil {
 		return nil, fmt.Errorf("user is nil")
 	}
 
-	if id.IsNil(user.ID) {
+	if user.ID == (gocql.UUID{}) {
 		return nil, fmt.Errorf("user id is required for updates")
 	}
 
-	// Fetch current state so we can merge
 	current, err := u.FindByID(user.ID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch user for partial update: %w", err)
+		return nil, fmt.Errorf("failed to fetch user: %w", err)
 	}
 	if current == nil {
 		return nil, fmt.Errorf("user not found")
@@ -163,9 +124,10 @@ func (u *UserDB) Updates(user *entity.User) (*entity.User, error) {
 	}
 	current.UpdatedAt = time.Now()
 
-	const query = `UPDATE users
-	               SET name = ?, email = ?, username = ?, password = ?, roles = ?, updated_at = ?
-	               WHERE id = ?`
+	const query = `
+		UPDATE users
+		SET name = ?, email = ?, username = ?, password = ?, roles = ?, updated_at = ?
+		WHERE id = ?`
 
 	if err := u.session.Query(query,
 		current.Name,
@@ -174,101 +136,150 @@ func (u *UserDB) Updates(user *entity.User) (*entity.User, error) {
 		current.Password,
 		current.Roles,
 		current.UpdatedAt,
-		gocql.UUID(current.ID),
+		current.ID,
 	).Exec(); err != nil {
-		return nil, fmt.Errorf("failed to partially update user: %w", err)
+		return nil, fmt.Errorf("failed to update user: %w", err)
 	}
 
 	return current, nil
 }
 
-// FindByID returns the user with the given UUID, or nil if not found.
-func (u *UserDB) FindByID(userID id.UUID) (*entity.User, error) {
-	const query = `SELECT id, name, email, username, password, roles, created_at, updated_at
-	               FROM users WHERE id = ?`
+func (u *UserDB) FindByID(userID gocql.UUID) (*entity.User, error) {
+	const query = `
+		SELECT id, name, email, username, password, roles, created_at, updated_at
+		FROM users
+		WHERE id = ?`
 
-	user, err := scanUser(
-		u.session.Query(query, gocql.UUID(userID)).Consistency(gocql.One).Scan,
-	)
-	if err != nil {
+	var user entity.User
+	if err := u.session.Query(query, userID).Consistency(gocql.One).Scan(
+		&user.ID,
+		&user.Name,
+		&user.Email,
+		&user.Username,
+		&user.Password,
+		&user.Roles,
+		&user.CreatedAt,
+		&user.UpdatedAt,
+	); err != nil {
 		if err == gocql.ErrNotFound {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("failed to find user by id: %w", err)
 	}
 
-	return user, nil
+	return &user, nil
 }
 
-// FindByEmailOrUsername searches by email first, then by username.
-// Returns nil (no error) when the user does not exist.
-func (u *UserDB) FindByEmailOrUsername(str string) (*entity.User, error) {
-	// Try email index first
-	user, err := u.findByField("email", str)
+func (u *UserDB) FindByEmail(email string, page pagination.Page) (*pagination.PagedResult[*entity.User], error) {
+	const query = `
+		SELECT id, name, email, username, password, roles, created_at, updated_at
+		FROM users
+		WHERE email = ?
+		ALLOW FILTERING`
+
+	iter := u.session.Query(query, email).
+		Consistency(gocql.One).
+		PageSize(page.Size).
+		PageState(page.PageState).
+		Iter()
+
+	var items []*entity.User
+	for {
+		var user entity.User
+		if !iter.Scan(
+			&user.ID,
+			&user.Name,
+			&user.Email,
+			&user.Username,
+			&user.Password,
+			&user.Roles,
+			&user.CreatedAt,
+			&user.UpdatedAt,
+		) {
+			break
+		}
+		cp := user
+		items = append(items, &cp)
+	}
+
+	nextPageState := iter.PageState()
+	if err := iter.Close(); err != nil {
+		return nil, fmt.Errorf("failed to find users by email: %w", err)
+	}
+
+	return &pagination.PagedResult[*entity.User]{Items: items, NextPageState: nextPageState}, nil
+}
+
+func (u *UserDB) FindByUsername(username string, page pagination.Page) (*pagination.PagedResult[*entity.User], error) {
+	const query = `
+		SELECT id, name, email, username, password, roles, created_at, updated_at
+		FROM users
+		WHERE username = ?
+		ALLOW FILTERING`
+
+	iter := u.session.Query(query, username).
+		Consistency(gocql.One).
+		PageSize(page.Size).
+		PageState(page.PageState).
+		Iter()
+
+	var items []*entity.User
+	for {
+		var user entity.User
+		if !iter.Scan(
+			&user.ID,
+			&user.Name,
+			&user.Email,
+			&user.Username,
+			&user.Password,
+			&user.Roles,
+			&user.CreatedAt,
+			&user.UpdatedAt,
+		) {
+			break
+		}
+		cp := user
+		items = append(items, &cp)
+	}
+
+	nextPageState := iter.PageState()
+	if err := iter.Close(); err != nil {
+		return nil, fmt.Errorf("failed to find users by username: %w", err)
+	}
+
+	return &pagination.PagedResult[*entity.User]{Items: items, NextPageState: nextPageState}, nil
+}
+
+func (u *UserDB) FindByEmailOrUsername(login string) (*entity.User, error) {
+	page := pagination.Page{Size: 1}
+
+	emailResult, err := u.FindByEmail(login, page)
 	if err != nil {
 		return nil, err
 	}
-	if user != nil {
-		return user, nil
+	if len(emailResult.Items) > 0 {
+		return emailResult.Items[0], nil
 	}
 
-	// Fall back to username index
-	return u.findByField("username", str)
-}
-
-// findByField is a helper that queries a secondary-indexed column.
-func (u *UserDB) findByField(field, value string) (*entity.User, error) {
-	query := fmt.Sprintf(
-		`SELECT id, name, email, username, password, roles, created_at, updated_at
-		 FROM users WHERE %s = ? LIMIT 1 ALLOW FILTERING`, field,
-	)
-
-	iter := u.session.Query(query, value).Consistency(gocql.One).Iter()
-	defer iter.Close()
-
-	var (
-		cassandraID gocql.UUID
-		name        string
-		email       string
-		username    string
-		password    string
-		roles       []string
-		createdAt   time.Time
-		updatedAt   time.Time
-	)
-
-	if iter.Scan(&cassandraID, &name, &email, &username, &password, &roles, &createdAt, &updatedAt) {
-		userID, err := id.Parse(cassandraID.String())
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse user id: %w", err)
-		}
-		return &entity.User{
-			ID:        userID,
-			Name:      name,
-			Email:     email,
-			Username:  username,
-			Password:  password,
-			Roles:     roles,
-			CreatedAt: createdAt,
-			UpdatedAt: updatedAt,
-		}, nil
+	usernameResult, err := u.FindByUsername(login, page)
+	if err != nil {
+		return nil, err
 	}
-
-	if err := iter.Close(); err != nil {
-		return nil, fmt.Errorf("failed to find user by %s: %w", field, err)
+	if len(usernameResult.Items) > 0 {
+		return usernameResult.Items[0], nil
 	}
 
 	return nil, nil
 }
 
-// DeleteByID removes the user with the given UUID.
-func (u *UserDB) DeleteByID(userID id.UUID) error {
-	if id.IsNil(userID) {
+func (u *UserDB) DeleteByID(userID gocql.UUID) error {
+	if userID == (gocql.UUID{}) {
 		return fmt.Errorf("user id is required for delete")
 	}
 
 	const query = `DELETE FROM users WHERE id = ?`
-	if err := u.session.Query(query, gocql.UUID(userID)).Exec(); err != nil {
+
+	if err := u.session.Query(query, userID).Exec(); err != nil {
 		return fmt.Errorf("failed to delete user: %w", err)
 	}
 
