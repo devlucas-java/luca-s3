@@ -6,7 +6,7 @@ import (
 	"github.com/devlucas-java/luca-s3/internal/delivery/http/middleware"
 	"github.com/devlucas-java/luca-s3/internal/infrastructure/repository"
 	"github.com/devlucas-java/luca-s3/internal/infrastructure/security/jwt"
-	"github.com/go-chi/chi"
+	"github.com/go-chi/chi/v5"
 )
 
 type AuthRouter struct {
@@ -24,13 +24,13 @@ func NewAuthRouter(handler *handler.AuthHandler, jwt *jwt.JWTService, repo repos
 }
 
 func (r *AuthRouter) RegisterRouters(c chi.Router) {
-
 	c.Post("/login", adapter.Adapt(r.authHandler.Login))
 	c.Post("/register", adapter.Adapt(r.authHandler.Register))
 
-	c.Route("/", func(protect chi.Router) {
-		protect.Use(middleware.AuthMiddleware(r.jwtService, r.userRepository))
+	c.Group(func(protected chi.Router) {
+		protected.Use(middleware.AuthMiddleware(r.jwtService, r.userRepository))
 
-		protect.Put("/password", adapter.Adapt(r.authHandler.ChangePassword))
+		protected.Put("/password", adapter.Adapt(r.authHandler.ChangePassword))
+		protected.Post("/password/verify", adapter.Adapt(r.authHandler.VerifyPassword))
 	})
 }

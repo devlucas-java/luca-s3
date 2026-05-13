@@ -4,7 +4,9 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/devlucas-java/luca-s3/internal/delivery/http/response"
 	"github.com/devlucas-java/luca-s3/internal/domain/entity"
+	"github.com/devlucas-java/luca-s3/internal/domain/errors"
 	"github.com/devlucas-java/luca-s3/internal/infrastructure/repository"
 	"github.com/devlucas-java/luca-s3/internal/infrastructure/security/jwt"
 	"github.com/devlucas-java/luca-s3/pkg/logger"
@@ -21,22 +23,23 @@ var log = logger.Instance()
 func AuthMiddleware(jwtService *jwt.JWTService, userRepository repository.UserRepository) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-
 			token := jwtauth.TokenFromHeader(r)
 
 			claims, err := jwtService.Validate(token)
 			if err != nil {
-				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				response.ResponseError(w, errors.ErrUnauthorized(err))
 				return
 			}
+
 			userIDStr, ok := claims["user_id"].(string)
 			if !ok {
-				http.Error(w, "Invalid token claims", http.StatusUnauthorized)
+				response.ResponseError(w, errors.ErrUnauthorized(nil))
 				return
 			}
+
 			userID, err := gocql.ParseUUID(userIDStr)
 			if err != nil {
-				http.Error(w, "Invalid duser ID in token", http.StatusUnauthorized)
+				response.ResponseError(w, errors.ErrInvalidUUID(err))
 				return
 			}
 
@@ -44,15 +47,15 @@ func AuthMiddleware(jwtService *jwt.JWTService, userRepository repository.UserRe
 
 			user, err := userRepository.FindByID(userID)
 			if err != nil || user == nil {
-				log.Errorf("Error finding duser by ID %s: %v", userID, err)
-				http.Error(w, "Forbidden", http.StatusForbidden)
+				log.Errorf("error finding user by ID %s: %v", userID, err)
+				response.ResponseError(w, errors.ErrForbidden(err))
 				return
 			}
 
 			var roles []string
-			if rolesClaim, ok := claims["roles"].([]interface{}); ok {
-				for _, r := range rolesClaim {
-					if roleStr, ok := r.(string); ok {
+			if rolesClaim, ok := claims["roles"].([]any); ok {
+				for _, ro := range rolesClaim {
+					if roleStr, ok := ro.(string); ok {
 						roles = append(roles, roleStr)
 					}
 				}
@@ -65,7 +68,6 @@ func AuthMiddleware(jwtService *jwt.JWTService, userRepository repository.UserRe
 			}
 
 			ctx := context.WithValue(r.Context(), AuthKey, auth)
-
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

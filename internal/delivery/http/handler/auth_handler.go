@@ -67,3 +67,19 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) err
 	response.ResponseEntity(w, http.StatusOK, map[string]string{"message": "password updated successfully"})
 	return nil
 }
+
+func (h *AuthHandler) VerifyPassword(w http.ResponseWriter, r *http.Request) error {
+	var req dauth.VerifyPasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		return errors.ErrBadRequest("invalid request payload", err)
+	}
+	if err := req.Validate(); err != nil {
+		return err
+	}
+	user := r.Context().Value(middleware.AuthKey).(*entity.User)
+	if err := h.authService.VerifyPassword(&req, user); err != nil {
+		return err
+	}
+	response.ResponseEntity(w, http.StatusOK, map[string]string{"message": "password verified successfully"})
+	return nil
+}
