@@ -1,6 +1,6 @@
 # Luca S3
 
-Luca S3 es un proyecto en Go para la gestión de videos con autenticación basada en roles, utilizando MinIO para el almacenamiento de objetos, Cassandra como base de datos y Redis para caché.
+Luca S3 es un proyecto en Go para la gestión de videos con autenticación basada en roles, utilizando MinIO para el almacenamiento de objetos, Cassandra como base de datos
 
 ## Funcionalidades
 
@@ -69,7 +69,7 @@ El diagrama del proyecto se encuentra en:
 docs/luca-s3-diagram.drawio
 ```
 
-Puedes abrirlo con [draw.io](https://app.diagrams.net/) (online) o con la extensión **Draw.io Integration** en VS Code. Muestra el flujo completo entre el cliente, el gateway Nginx, los handlers HTTP, los servicios, MinIO, Cassandra y Redis.
+Puedes abrirlo con [draw.io](https://app.diagrams.net/) (online) o con la extensión **Draw.io Integration** en VS Code. Muestra el flujo completo entre el cliente, el gateway Nginx, los handlers HTTP, los servicios, MinIO, Cassandra
 
 ## Cómo Funciona
 
@@ -100,7 +100,7 @@ Puedes abrirlo con [draw.io](https://app.diagrams.net/) (online) o con la extens
    ```bash
    docker-compose up -d
    ```
-   Esto iniciará Cassandra, MinIO, Redis y el worker FFmpeg.
+   Esto iniciará Cassandra, MinIO y el worker FFmpeg.
 
 3. **Configurar el .env**:
    - Edita el archivo `.default.env` en la raíz con tus configuraciones (ya viene con valores de prueba).
@@ -147,7 +147,7 @@ Puedes abrirlo con [draw.io](https://app.diagrams.net/) (online) o con la extens
 
 # Luca S3 — English
 
-Luca S3 is a Go project for video management with role-based authentication, using MinIO for object storage, Cassandra as the database, and Redis for caching.
+Luca S3 is a Go project for video management with role-based authentication, using MinIO for object storage, Cassandra as the database
 
 ## Features
 
@@ -216,7 +216,7 @@ The project diagram is located at:
 docs/luca-s3-diagram.drawio
 ```
 
-Open it with [draw.io](https://app.diagrams.net/) (online) or the **Draw.io Integration** extension in VS Code. It shows the full flow between the client, Nginx gateway, HTTP handlers, services, MinIO, Cassandra, and Redis.
+Open it with [draw.io](https://app.diagrams.net/) (online) or the **Draw.io Integration** extension in VS Code. It shows the full flow between the client, Nginx gateway, HTTP handlers, services, MinIO and Cassandra
 
 ## How It Works
 
@@ -247,7 +247,7 @@ Open it with [draw.io](https://app.diagrams.net/) (online) or the **Draw.io Inte
    ```bash
    docker-compose up -d
    ```
-   This will start Cassandra, MinIO, Redis, and the FFmpeg worker.
+   This will start Cassandra, MinIO, and the FFmpeg worker.
 
 3. **Configure the .env**:
    - Edit the `.default.env` file at the root with your settings (already filled with test values).
