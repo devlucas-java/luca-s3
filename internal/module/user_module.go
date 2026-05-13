@@ -11,12 +11,12 @@ import (
 	"github.com/gocql/gocql"
 )
 
-func InitModuleAuth(cql *gocql.Session, jwtService *jwt.JWTService) chi.Router {
+func InitModuleUser(cql *gocql.Session, jwtService *jwt.JWTService) chi.Router {
 	db := database.NewUserDB(cql)
 	userMapper := mapper.NewUserMapper()
-	svc := service.NewAuthService(db, jwtService, userMapper)
-	h := handler.NewAuthHandler(svc)
-	r := router.NewAuthRouter(h, jwtService, db)
+	svc := service.NewUserService(db, userMapper)
+	h := handler.NewUserHandler(svc)
+	r := router.NewUserRouter(h, jwtService, db)
 
 	c := chi.NewRouter()
 	r.RegisterRouters(c)
