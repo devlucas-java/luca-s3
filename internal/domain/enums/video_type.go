@@ -7,6 +7,6 @@ const (
 	VideoType360    VideoType = "360"
 )
 
-func (vt VideoType) ToString() string {
+func (vt VideoType) String() string {
 	return string(vt)
 }

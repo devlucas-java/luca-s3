@@ -3,10 +3,10 @@ package enums
 type Role string
 
 const (
-	ADMIN Role = "ADMIN"
-	USER  Role = "USER"
+	RoleAdmin Role = "ADMIN"
+	RoleUser  Role = "USER"
 )
 
-func (r Role) ToString() string {
+func (r Role) String() string {
 	return string(r)
 }

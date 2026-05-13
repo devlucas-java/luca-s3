@@ -41,7 +41,6 @@ func NewMetaData(
 	width int,
 	height int,
 ) (*MetaData, error) {
-
 	uuid, err := gocql.RandomUUID()
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate metadata uuid: %w", err)
@@ -54,8 +53,8 @@ func NewMetaData(
 		Filename:        filename,
 		ObjectKey:       objectKey,
 		ManifestKey:     manifestKey,
-		VideoType:       videoType.ToString(),
-		Status:          enums.NO_UPLOADED.ToString(),
+		VideoType:       videoType.String(),
+		Status:          enums.StatusNoUploaded.String(),
 		Size:            size,
 		MimeType:        mimeType,
 		DurationSeconds: durationSeconds,

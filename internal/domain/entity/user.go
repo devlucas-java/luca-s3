@@ -2,6 +2,7 @@ package entity
 
 import (
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/devlucas-java/luca-s3/internal/domain/enums"
@@ -27,28 +28,25 @@ func NewUser(name, email, username, pass string) (*User, error) {
 	if err != nil {
 		return nil, err
 	}
-	now := time.Now()
+
 	uuid, err := gocql.RandomUUID()
 	if err != nil {
-		return nil, fmt.Errorf("failed generate user uuid: %v", err)
+		return nil, fmt.Errorf("failed to generate user uuid: %w", err)
 	}
+
+	now := time.Now()
 	return &User{
 		ID:        uuid,
-		CreatedAt: now,
-		UpdatedAt: now,
 		Name:      name,
 		Email:     email,
 		Username:  username,
 		Password:  hash,
-		Roles:     []string{enums.USER.ToString()},
+		Roles:     []string{enums.RoleUser.String()},
+		CreatedAt: now,
+		UpdatedAt: now,
 	}, nil
 }
 
 func (u *User) HasRole(role enums.Role) bool {
-	for _, r := range u.Roles {
-		if r == role.ToString() {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(u.Roles, role.String())
 }

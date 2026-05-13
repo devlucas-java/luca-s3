@@ -3,12 +3,12 @@ package enums
 type Status string
 
 const (
-	FAILED      Status = "FAILED"
-	PENDING     Status = "PENDING"
-	UPLOADED    Status = "UPLOADED"
-	NO_UPLOADED Status = "NO_UPLOADED"
+	StatusFailed     Status = "FAILED"
+	StatusPending    Status = "PENDING"
+	StatusUploaded   Status = "UPLOADED"
+	StatusNoUploaded Status = "NO_UPLOADED"
 )
 
-func (s Status) ToString() string {
+func (s Status) String() string {
 	return string(s)
 }

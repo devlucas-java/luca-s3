@@ -2,6 +2,8 @@ package errors
 
 import "fmt"
 
+// AppError is the standard application error type, carrying an HTTP status code,
+// a machine-readable code, a human-readable message, and an optional cause.
 type AppError struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
@@ -20,6 +22,7 @@ func (e *AppError) Unwrap() error {
 	return e.Err
 }
 
+// New creates a new AppError.
 func New(code, message string, status int, err error) *AppError {
 	return &AppError{
 		Code:    code,
@@ -27,8 +30,4 @@ func New(code, message string, status int, err error) *AppError {
 		Status:  status,
 		Err:     err,
 	}
-}
-
-func Wrap(code, message string, status int, err error) *AppError {
-	return New(code, message, status, err)
 }
