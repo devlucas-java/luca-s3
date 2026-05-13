@@ -3,7 +3,6 @@ module github.com/devlucas-java/luca-s3
 go 1.26.2
 
 require (
-	github.com/go-chi/chi v1.5.1
 	github.com/go-chi/chi/v5 v5.2.5
 	github.com/go-chi/jwtauth v1.2.0
 	github.com/gocql/gocql v1.7.0

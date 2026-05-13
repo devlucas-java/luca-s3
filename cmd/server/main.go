@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/devlucas-java/luca-s3/configs"
@@ -8,36 +9,38 @@ import (
 	"github.com/devlucas-java/luca-s3/internal/infrastructure/security/jwt"
 	"github.com/devlucas-java/luca-s3/internal/module"
 	"github.com/devlucas-java/luca-s3/pkg/logger"
-	"github.com/go-chi/chi"
+	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 )
 
 func main() {
-
 	logger.SetLogLevel(logger.DEBUG)
 	log := logger.Instance()
 
 	cfg, err := configs.LoadConfig()
 	if err != nil {
-		log.Fatalf(" FATAL in load config: %v", err)
+		log.Fatalf("failed to load config: %v", err)
 	}
 
 	if err := cassandra.InitSession(cfg); err != nil {
-		log.Fatalf("Failed to initialize Cassandra session: %v", err)
+		log.Fatalf("failed to initialize Cassandra session: %v", err)
 	}
 	defer cassandra.CloseSession()
 
-	log.Debug("Server started successfully")
-
-	jwt := jwt.NewJWTService(cfg.JwtSecret)
+	jwtService := jwt.NewJWTService(cfg.JwtSecret)
 
 	r := chi.NewRouter()
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 
-	authRouters := module.InitModuleAuth(cassandra.GetSession(), jwt)
-	r.Mount("/auth", authRouters)
+	r.Mount("/auth", module.InitModuleAuth(cassandra.GetSession(), jwtService))
+	r.Mount("/users", module.InitModuleUser(cassandra.GetSession(), jwtService))
 
-	http.ListenAndServe(cfg.ServerPort, r)
+	addr := fmt.Sprintf(":%s", cfg.ServerPort)
+	log.Infof("server listening on %s", addr)
+
+	if err := http.ListenAndServe(addr, r); err != nil {
+		log.Fatalf("server error: %v", err)
+	}
 }
