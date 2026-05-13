@@ -11,5 +11,6 @@ type UserRepository interface {
 	Updates(user *entity.User) (*entity.User, error)
 	FindByID(id gocql.UUID) (*entity.User, error)
 	FindByEmailOrUsername(str string) (*entity.User, error)
+	ExistsByEmailOrUsername(str string) (bool, error)
 	DeleteByID(id gocql.UUID) error
 }

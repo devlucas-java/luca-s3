@@ -272,6 +272,14 @@ func (u *UserDB) FindByEmailOrUsername(login string) (*entity.User, error) {
 	return nil, nil
 }
 
+func (u *UserDB) ExistsByEmailOrUsername(str string) (bool, error) {
+	user, err := u.FindByEmailOrUsername(str)
+	if err != nil && user == nil {
+		return false, err
+	}
+	return true, err
+}
+
 func (u *UserDB) DeleteByID(userID gocql.UUID) error {
 	if userID == (gocql.UUID{}) {
 		return fmt.Errorf("user id is required for delete")
