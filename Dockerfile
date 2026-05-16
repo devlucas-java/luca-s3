@@ -1,36 +1,42 @@
-# Build stage
-FROM golang:1.26-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
-WORKDIR /build
+# Install FFmpeg and build dependencies
+RUN apk add --no-cache \
+    ffmpeg \
+    git \
+    ca-certificates
 
-# Copy go mod files
+WORKDIR /app
+
+# Copy go mod files and config
 COPY go.mod go.sum ./
-
-# Download dependencies
 RUN go mod download
 
 # Copy source code
 COPY . .
 
-# Build the application
-RUN CGO_ENABLED=0 GOOS=linux go build -a -o server ./cmd/server
+# Build
+RUN CGO_ENABLED=0 GOOS=linux go build -o /app/worker ./cmd/server
 
-# Development stage
-FROM golang:1.26-alpine
+# Final stage
+FROM alpine:latest
+
+# Install FFmpeg and runtime dependencies
+RUN apk add --no-cache \
+    ffmpeg \
+    ca-certificates
 
 WORKDIR /app
 
-# Copy built binary from builder
-COPY --from=builder /build/server .
+# Copy binary from builder
+COPY --from=builder /app/worker .
 
-# Copy source code for development
-COPY . .
+# Copy config file
+COPY .default.env .
 
-# Copy .env file for development
-COPY .default.env .default.env
+# Create temp directory for FFmpeg work
+RUN mkdir -p /tmp/ffmpeg && chmod 777 /tmp/ffmpeg
 
-# Expose port
-EXPOSE 8080
+EXPOSE 50051
 
-# Run the application
-CMD ["./server"]
+CMD ["./worker"]

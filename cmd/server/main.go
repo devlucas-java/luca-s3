@@ -1,46 +1,47 @@
 package main
 
 import (
-	"fmt"
-	"net/http"
-
 	"github.com/devlucas-java/luca-s3/configs"
-	"github.com/devlucas-java/luca-s3/internal/infrastructure/cassandra"
-	"github.com/devlucas-java/luca-s3/internal/infrastructure/security/jwt"
-	"github.com/devlucas-java/luca-s3/internal/module"
+	"github.com/devlucas-java/luca-s3/internal/application/service"
+	grpcserver "github.com/devlucas-java/luca-s3/internal/delivery/grpc"
+	minioclient "github.com/devlucas-java/luca-s3/internal/infrastructure/minio"
+	redisclient "github.com/devlucas-java/luca-s3/internal/infrastructure/redis"
 	"github.com/devlucas-java/luca-s3/pkg/logger"
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 )
 
 func main() {
-	logger.SetLogLevel(logger.DEBUG)
 	log := logger.Instance()
+	log.Info("starting luca-s3 transcode worker")
 
 	cfg, err := configs.LoadConfig()
 	if err != nil {
-		log.Fatalf("failed to load config: %v", err)
+		log.Fatalf("config: %v", err)
+	}
+	if err := cfg.Validate(); err != nil {
+		log.Fatalf("config validate: %v", err)
 	}
 
-	if err := cassandra.InitSession(cfg); err != nil {
-		log.Fatalf("failed to initialize Cassandra session: %v", err)
+	// Redis for job state
+	redis, err := redisclient.New(cfg.RedisAddr, cfg.RedisPassword, cfg.RedisDB)
+	if err != nil {
+		log.Fatalf("redis: %v", err)
 	}
-	defer cassandra.CloseSession()
+	defer redis.Close()
 
-	jwtService := jwt.NewJWTService(cfg.JwtSecret)
+	jobRepo := redisclient.NewJobRepository(redis)
 
-	r := chi.NewRouter()
-	r.Use(middleware.RealIP)
-	r.Use(middleware.Logger)
-	r.Use(middleware.Recoverer)
+	// MinIO client
+	minio, err := minioclient.New(cfg.MinIOEndpoint, cfg.MinIOAccessKey, cfg.MinIOSecretKey, cfg.MinIOUseSSL)
+	if err != nil {
+		log.Fatalf("minio: %v", err)
+	}
 
-	r.Mount("/auth", module.InitModuleAuth(cassandra.GetSession(), jwtService))
-	r.Mount("/users", module.InitModuleUser(cassandra.GetSession(), jwtService))
+	transcodeSvc := service.NewTranscodeService(minio, jobRepo)
+	handler := grpcserver.NewHandler(transcodeSvc, minio)
+	grpcSrv := grpcserver.NewServer(handler)
 
-	addr := fmt.Sprintf(":%s", cfg.ServerPort)
-	log.Infof("server listening on %s", addr)
-
-	if err := http.ListenAndServe(addr, r); err != nil {
-		log.Fatalf("server error: %v", err)
+	log.Info("worker ready - MinIO is the source of truth, Redis for job state")
+	if err := grpcSrv.Start(cfg.ServerPort); err != nil {
+		log.Fatalf("grpc server: %v", err)
 	}
 }
