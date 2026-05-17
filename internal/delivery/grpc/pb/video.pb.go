@@ -137,11 +137,16 @@ func (JobStatus) EnumDescriptor() ([]byte, []int) {
 	return file_proto_video_proto_rawDescGZIP(), []int{1}
 }
 
+// Example request:
+//
+//	video_id:      "teste"
+//	original_path: "teste.mp4"
+//	resolutions:   [RESOLUTION_720P, RESOLUTION_480P, RESOLUTION_360P]
 type TranscodeVideoRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	VideoId       string                 `protobuf:"bytes,1,opt,name=video_id,json=videoId,proto3" json:"video_id,omitempty"`                        // Video ID in MinIO
-	OriginalPath  string                 `protobuf:"bytes,2,opt,name=original_path,json=originalPath,proto3" json:"original_path,omitempty"`         // Path in MinIO: videos/{id}.mp4
-	Resolutions   []Resolution           `protobuf:"varint,3,rep,packed,name=resolutions,proto3,enum=video.Resolution" json:"resolutions,omitempty"` // Desired resolutions
+	VideoId       string                 `protobuf:"bytes,1,opt,name=video_id,json=videoId,proto3" json:"video_id,omitempty"`
+	OriginalPath  string                 `protobuf:"bytes,2,opt,name=original_path,json=originalPath,proto3" json:"original_path,omitempty"`
+	Resolutions   []Resolution           `protobuf:"varint,3,rep,packed,name=resolutions,proto3,enum=video.Resolution" json:"resolutions,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -197,6 +202,11 @@ func (x *TranscodeVideoRequest) GetResolutions() []Resolution {
 	return nil
 }
 
+// Returns immediately — transcoding runs in background.
+// Example response:
+//
+//	job_id:   "teste"
+//	video_id: "teste"
 type TranscodeVideoResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	JobId         string                 `protobuf:"bytes,1,opt,name=job_id,json=jobId,proto3" json:"job_id,omitempty"`
@@ -249,65 +259,22 @@ func (x *TranscodeVideoResponse) GetVideoId() string {
 	return ""
 }
 
-type JobStatusRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	JobId         string                 `protobuf:"bytes,1,opt,name=job_id,json=jobId,proto3" json:"job_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *JobStatusRequest) Reset() {
-	*x = JobStatusRequest{}
-	mi := &file_proto_video_proto_msgTypes[2]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *JobStatusRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*JobStatusRequest) ProtoMessage() {}
-
-func (x *JobStatusRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_video_proto_msgTypes[2]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use JobStatusRequest.ProtoReflect.Descriptor instead.
-func (*JobStatusRequest) Descriptor() ([]byte, []int) {
-	return file_proto_video_proto_rawDescGZIP(), []int{2}
-}
-
-func (x *JobStatusRequest) GetJobId() string {
-	if x != nil {
-		return x.JobId
-	}
-	return ""
-}
-
 type ResolutionProgress struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Resolution    Resolution             `protobuf:"varint,1,opt,name=resolution,proto3,enum=video.Resolution" json:"resolution,omitempty"`
 	Status        JobStatus              `protobuf:"varint,2,opt,name=status,proto3,enum=video.JobStatus" json:"status,omitempty"`
-	LastSegment   int32                  `protobuf:"varint,3,opt,name=last_segment,json=lastSegment,proto3" json:"last_segment,omitempty"`       // Last processed segment
-	TotalSegments int32                  `protobuf:"varint,4,opt,name=total_segments,json=totalSegments,proto3" json:"total_segments,omitempty"` // Total expected segments
-	ThumbnailDone bool                   `protobuf:"varint,5,opt,name=thumbnail_done,json=thumbnailDone,proto3" json:"thumbnail_done,omitempty"` // Whether thumbnail was generated
-	Error         string                 `protobuf:"bytes,6,opt,name=error,proto3" json:"error,omitempty"`
+	SegmentsDone  int32                  `protobuf:"varint,3,opt,name=segments_done,json=segmentsDone,proto3" json:"segments_done,omitempty"`
+	TotalSegments int32                  `protobuf:"varint,4,opt,name=total_segments,json=totalSegments,proto3" json:"total_segments,omitempty"`
+	Percent       int32                  `protobuf:"varint,5,opt,name=percent,proto3" json:"percent,omitempty"` // 0–100
+	ThumbnailDone bool                   `protobuf:"varint,6,opt,name=thumbnail_done,json=thumbnailDone,proto3" json:"thumbnail_done,omitempty"`
+	Error         string                 `protobuf:"bytes,7,opt,name=error,proto3" json:"error,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ResolutionProgress) Reset() {
 	*x = ResolutionProgress{}
-	mi := &file_proto_video_proto_msgTypes[3]
+	mi := &file_proto_video_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -319,7 +286,7 @@ func (x *ResolutionProgress) String() string {
 func (*ResolutionProgress) ProtoMessage() {}
 
 func (x *ResolutionProgress) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_video_proto_msgTypes[3]
+	mi := &file_proto_video_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -332,7 +299,7 @@ func (x *ResolutionProgress) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResolutionProgress.ProtoReflect.Descriptor instead.
 func (*ResolutionProgress) Descriptor() ([]byte, []int) {
-	return file_proto_video_proto_rawDescGZIP(), []int{3}
+	return file_proto_video_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *ResolutionProgress) GetResolution() Resolution {
@@ -349,9 +316,9 @@ func (x *ResolutionProgress) GetStatus() JobStatus {
 	return JobStatus_JOB_STATUS_UNKNOWN
 }
 
-func (x *ResolutionProgress) GetLastSegment() int32 {
+func (x *ResolutionProgress) GetSegmentsDone() int32 {
 	if x != nil {
-		return x.LastSegment
+		return x.SegmentsDone
 	}
 	return 0
 }
@@ -359,6 +326,13 @@ func (x *ResolutionProgress) GetLastSegment() int32 {
 func (x *ResolutionProgress) GetTotalSegments() int32 {
 	if x != nil {
 		return x.TotalSegments
+	}
+	return 0
+}
+
+func (x *ResolutionProgress) GetPercent() int32 {
+	if x != nil {
+		return x.Percent
 	}
 	return 0
 }
@@ -377,22 +351,39 @@ func (x *ResolutionProgress) GetError() string {
 	return ""
 }
 
+// Used by WatchJob and ListJobs responses.
+// Example:
+//
+//	job_id:           "teste"
+//	video_id:         "teste"
+//	status:           JOB_STATUS_DONE
+//	overall_percent:  100
+//	original_width:   1280
+//	original_height:  720
+//	duration_seconds: 45.7
+//	progress: [
+//	  { resolution: RESOLUTION_720P, status: JOB_STATUS_DONE, segments_done: 23, total_segments: 23, percent: 100, thumbnail_done: true },
+//	  { resolution: RESOLUTION_480P, status: JOB_STATUS_DONE, segments_done: 23, total_segments: 23, percent: 100, thumbnail_done: true },
+//	]
 type JobStatusResponse struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	JobId           string                 `protobuf:"bytes,1,opt,name=job_id,json=jobId,proto3" json:"job_id,omitempty"`
 	VideoId         string                 `protobuf:"bytes,2,opt,name=video_id,json=videoId,proto3" json:"video_id,omitempty"`
 	Status          JobStatus              `protobuf:"varint,3,opt,name=status,proto3,enum=video.JobStatus" json:"status,omitempty"`
 	Progress        []*ResolutionProgress  `protobuf:"bytes,4,rep,name=progress,proto3" json:"progress,omitempty"`
-	OriginalWidth   int32                  `protobuf:"varint,5,opt,name=original_width,json=originalWidth,proto3" json:"original_width,omitempty"`
-	OriginalHeight  int32                  `protobuf:"varint,6,opt,name=original_height,json=originalHeight,proto3" json:"original_height,omitempty"`
-	DurationSeconds float64                `protobuf:"fixed64,7,opt,name=duration_seconds,json=durationSeconds,proto3" json:"duration_seconds,omitempty"`
+	OverallPercent  int32                  `protobuf:"varint,5,opt,name=overall_percent,json=overallPercent,proto3" json:"overall_percent,omitempty"`
+	OriginalWidth   int32                  `protobuf:"varint,6,opt,name=original_width,json=originalWidth,proto3" json:"original_width,omitempty"`
+	OriginalHeight  int32                  `protobuf:"varint,7,opt,name=original_height,json=originalHeight,proto3" json:"original_height,omitempty"`
+	DurationSeconds float64                `protobuf:"fixed64,8,opt,name=duration_seconds,json=durationSeconds,proto3" json:"duration_seconds,omitempty"`
+	CreatedAt       string                 `protobuf:"bytes,9,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt       string                 `protobuf:"bytes,10,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
 
 func (x *JobStatusResponse) Reset() {
 	*x = JobStatusResponse{}
-	mi := &file_proto_video_proto_msgTypes[4]
+	mi := &file_proto_video_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -404,7 +395,7 @@ func (x *JobStatusResponse) String() string {
 func (*JobStatusResponse) ProtoMessage() {}
 
 func (x *JobStatusResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_video_proto_msgTypes[4]
+	mi := &file_proto_video_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -417,7 +408,7 @@ func (x *JobStatusResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JobStatusResponse.ProtoReflect.Descriptor instead.
 func (*JobStatusResponse) Descriptor() ([]byte, []int) {
-	return file_proto_video_proto_rawDescGZIP(), []int{4}
+	return file_proto_video_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *JobStatusResponse) GetJobId() string {
@@ -448,6 +439,13 @@ func (x *JobStatusResponse) GetProgress() []*ResolutionProgress {
 	return nil
 }
 
+func (x *JobStatusResponse) GetOverallPercent() int32 {
+	if x != nil {
+		return x.OverallPercent
+	}
+	return 0
+}
+
 func (x *JobStatusResponse) GetOriginalWidth() int32 {
 	if x != nil {
 		return x.OriginalWidth
@@ -469,17 +467,235 @@ func (x *JobStatusResponse) GetDurationSeconds() float64 {
 	return 0
 }
 
+func (x *JobStatusResponse) GetCreatedAt() string {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return ""
+}
+
+func (x *JobStatusResponse) GetUpdatedAt() string {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return ""
+}
+
+// Streams JobStatusResponse until job finishes or client disconnects.
+// Example request:
+//
+//	video_id:    "teste"
+//	interval_ms: 500
+type WatchJobRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	VideoId       string                 `protobuf:"bytes,1,opt,name=video_id,json=videoId,proto3" json:"video_id,omitempty"`
+	IntervalMs    int32                  `protobuf:"varint,2,opt,name=interval_ms,json=intervalMs,proto3" json:"interval_ms,omitempty"` // polling interval, default 500ms, min 200ms, max 5000ms
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WatchJobRequest) Reset() {
+	*x = WatchJobRequest{}
+	mi := &file_proto_video_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WatchJobRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WatchJobRequest) ProtoMessage() {}
+
+func (x *WatchJobRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_video_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WatchJobRequest.ProtoReflect.Descriptor instead.
+func (*WatchJobRequest) Descriptor() ([]byte, []int) {
+	return file_proto_video_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *WatchJobRequest) GetVideoId() string {
+	if x != nil {
+		return x.VideoId
+	}
+	return ""
+}
+
+func (x *WatchJobRequest) GetIntervalMs() int32 {
+	if x != nil {
+		return x.IntervalMs
+	}
+	return 0
+}
+
+// Example — list all jobs, first page:
+//
+//	filter_status: JOB_STATUS_UNKNOWN  (= no filter, returns all)
+//	page:          1
+//	page_size:     20
+//
+// Example — list only done jobs, second page:
+//
+//	filter_status: JOB_STATUS_DONE
+//	page:          2
+//	page_size:     10
+type ListJobsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	FilterStatus  JobStatus              `protobuf:"varint,1,opt,name=filter_status,json=filterStatus,proto3,enum=video.JobStatus" json:"filter_status,omitempty"` // JOB_STATUS_UNKNOWN = no filter (all statuses)
+	Page          int32                  `protobuf:"varint,2,opt,name=page,proto3" json:"page,omitempty"`                                                          // 1-indexed, values < 1 treated as 1
+	PageSize      int32                  `protobuf:"varint,3,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`                                  // default 20, max 100, values <= 0 use default
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListJobsRequest) Reset() {
+	*x = ListJobsRequest{}
+	mi := &file_proto_video_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListJobsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListJobsRequest) ProtoMessage() {}
+
+func (x *ListJobsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_video_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListJobsRequest.ProtoReflect.Descriptor instead.
+func (*ListJobsRequest) Descriptor() ([]byte, []int) {
+	return file_proto_video_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *ListJobsRequest) GetFilterStatus() JobStatus {
+	if x != nil {
+		return x.FilterStatus
+	}
+	return JobStatus_JOB_STATUS_UNKNOWN
+}
+
+func (x *ListJobsRequest) GetPage() int32 {
+	if x != nil {
+		return x.Page
+	}
+	return 0
+}
+
+func (x *ListJobsRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+// Example response:
+//
+//	total:     4
+//	page:      1
+//	page_size: 20
+//	jobs:      [ ...JobStatusResponse... ]
+type ListJobsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Jobs          []*JobStatusResponse   `protobuf:"bytes,1,rep,name=jobs,proto3" json:"jobs,omitempty"`
+	Total         int32                  `protobuf:"varint,2,opt,name=total,proto3" json:"total,omitempty"`
+	Page          int32                  `protobuf:"varint,3,opt,name=page,proto3" json:"page,omitempty"`
+	PageSize      int32                  `protobuf:"varint,4,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListJobsResponse) Reset() {
+	*x = ListJobsResponse{}
+	mi := &file_proto_video_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListJobsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListJobsResponse) ProtoMessage() {}
+
+func (x *ListJobsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_video_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListJobsResponse.ProtoReflect.Descriptor instead.
+func (*ListJobsResponse) Descriptor() ([]byte, []int) {
+	return file_proto_video_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *ListJobsResponse) GetJobs() []*JobStatusResponse {
+	if x != nil {
+		return x.Jobs
+	}
+	return nil
+}
+
+func (x *ListJobsResponse) GetTotal() int32 {
+	if x != nil {
+		return x.Total
+	}
+	return 0
+}
+
+func (x *ListJobsResponse) GetPage() int32 {
+	if x != nil {
+		return x.Page
+	}
+	return 0
+}
+
+func (x *ListJobsResponse) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+// Example request:
+//
+//	video_id: "teste"
 type GetHLSManifestRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	VideoId       string                 `protobuf:"bytes,1,opt,name=video_id,json=videoId,proto3" json:"video_id,omitempty"`
-	ExpiresIn     int32                  `protobuf:"varint,2,opt,name=expires_in,json=expiresIn,proto3" json:"expires_in,omitempty"` // seconds, default 3600
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetHLSManifestRequest) Reset() {
 	*x = GetHLSManifestRequest{}
-	mi := &file_proto_video_proto_msgTypes[5]
+	mi := &file_proto_video_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -491,7 +707,7 @@ func (x *GetHLSManifestRequest) String() string {
 func (*GetHLSManifestRequest) ProtoMessage() {}
 
 func (x *GetHLSManifestRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_video_proto_msgTypes[5]
+	mi := &file_proto_video_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -504,7 +720,7 @@ func (x *GetHLSManifestRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetHLSManifestRequest.ProtoReflect.Descriptor instead.
 func (*GetHLSManifestRequest) Descriptor() ([]byte, []int) {
-	return file_proto_video_proto_rawDescGZIP(), []int{5}
+	return file_proto_video_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *GetHLSManifestRequest) GetVideoId() string {
@@ -514,24 +730,19 @@ func (x *GetHLSManifestRequest) GetVideoId() string {
 	return ""
 }
 
-func (x *GetHLSManifestRequest) GetExpiresIn() int32 {
-	if x != nil {
-		return x.ExpiresIn
-	}
-	return 0
-}
-
+// Example response:
+//
+//	url: "http://minio:9000/videos/teste/hls/master.m3u8"
 type GetHLSManifestResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Url           string                 `protobuf:"bytes,1,opt,name=url,proto3" json:"url,omitempty"`
-	ExpiresIn     int32                  `protobuf:"varint,2,opt,name=expires_in,json=expiresIn,proto3" json:"expires_in,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetHLSManifestResponse) Reset() {
 	*x = GetHLSManifestResponse{}
-	mi := &file_proto_video_proto_msgTypes[6]
+	mi := &file_proto_video_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -543,7 +754,7 @@ func (x *GetHLSManifestResponse) String() string {
 func (*GetHLSManifestResponse) ProtoMessage() {}
 
 func (x *GetHLSManifestResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_video_proto_msgTypes[6]
+	mi := &file_proto_video_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -556,7 +767,7 @@ func (x *GetHLSManifestResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetHLSManifestResponse.ProtoReflect.Descriptor instead.
 func (*GetHLSManifestResponse) Descriptor() ([]byte, []int) {
-	return file_proto_video_proto_rawDescGZIP(), []int{6}
+	return file_proto_video_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *GetHLSManifestResponse) GetUrl() string {
@@ -566,13 +777,236 @@ func (x *GetHLSManifestResponse) GetUrl() string {
 	return ""
 }
 
-func (x *GetHLSManifestResponse) GetExpiresIn() int32 {
+// Example request:
+//
+//	video_id: "teste"
+type InspectVideoRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	VideoId       string                 `protobuf:"bytes,1,opt,name=video_id,json=videoId,proto3" json:"video_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *InspectVideoRequest) Reset() {
+	*x = InspectVideoRequest{}
+	mi := &file_proto_video_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *InspectVideoRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*InspectVideoRequest) ProtoMessage() {}
+
+func (x *InspectVideoRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_video_proto_msgTypes[9]
 	if x != nil {
-		return x.ExpiresIn
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use InspectVideoRequest.ProtoReflect.Descriptor instead.
+func (*InspectVideoRequest) Descriptor() ([]byte, []int) {
+	return file_proto_video_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *InspectVideoRequest) GetVideoId() string {
+	if x != nil {
+		return x.VideoId
+	}
+	return ""
+}
+
+type ResolutionInfo struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Resolution    Resolution             `protobuf:"varint,1,opt,name=resolution,proto3,enum=video.Resolution" json:"resolution,omitempty"`
+	SegmentCount  int32                  `protobuf:"varint,2,opt,name=segment_count,json=segmentCount,proto3" json:"segment_count,omitempty"`
+	HasPlaylist   bool                   `protobuf:"varint,3,opt,name=has_playlist,json=hasPlaylist,proto3" json:"has_playlist,omitempty"`
+	HasThumbnail  bool                   `protobuf:"varint,4,opt,name=has_thumbnail,json=hasThumbnail,proto3" json:"has_thumbnail,omitempty"`
+	SizeBytes     int64                  `protobuf:"varint,5,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ResolutionInfo) Reset() {
+	*x = ResolutionInfo{}
+	mi := &file_proto_video_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResolutionInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResolutionInfo) ProtoMessage() {}
+
+func (x *ResolutionInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_video_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResolutionInfo.ProtoReflect.Descriptor instead.
+func (*ResolutionInfo) Descriptor() ([]byte, []int) {
+	return file_proto_video_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *ResolutionInfo) GetResolution() Resolution {
+	if x != nil {
+		return x.Resolution
+	}
+	return Resolution_RESOLUTION_UNKNOWN
+}
+
+func (x *ResolutionInfo) GetSegmentCount() int32 {
+	if x != nil {
+		return x.SegmentCount
 	}
 	return 0
 }
 
+func (x *ResolutionInfo) GetHasPlaylist() bool {
+	if x != nil {
+		return x.HasPlaylist
+	}
+	return false
+}
+
+func (x *ResolutionInfo) GetHasThumbnail() bool {
+	if x != nil {
+		return x.HasThumbnail
+	}
+	return false
+}
+
+func (x *ResolutionInfo) GetSizeBytes() int64 {
+	if x != nil {
+		return x.SizeBytes
+	}
+	return 0
+}
+
+// Example response:
+//
+//	video_id:         "teste"
+//	found:            true
+//	original_path:    "teste.mp4"
+//	original_size:    52428800
+//	has_master:       true
+//	total_size_bytes: 78643200
+//	resolutions: [
+//	  { resolution: RESOLUTION_720P, segment_count: 23, has_playlist: true, has_thumbnail: true, size_bytes: 31457280 },
+//	  { resolution: RESOLUTION_480P, segment_count: 23, has_playlist: true, has_thumbnail: true, size_bytes: 20971520 },
+//	]
+type InspectVideoResponse struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	VideoId        string                 `protobuf:"bytes,1,opt,name=video_id,json=videoId,proto3" json:"video_id,omitempty"`
+	Found          bool                   `protobuf:"varint,2,opt,name=found,proto3" json:"found,omitempty"`
+	OriginalPath   string                 `protobuf:"bytes,3,opt,name=original_path,json=originalPath,proto3" json:"original_path,omitempty"`
+	OriginalSize   int64                  `protobuf:"varint,4,opt,name=original_size,json=originalSize,proto3" json:"original_size,omitempty"`
+	HasMaster      bool                   `protobuf:"varint,5,opt,name=has_master,json=hasMaster,proto3" json:"has_master,omitempty"`
+	Resolutions    []*ResolutionInfo      `protobuf:"bytes,6,rep,name=resolutions,proto3" json:"resolutions,omitempty"`
+	TotalSizeBytes int64                  `protobuf:"varint,7,opt,name=total_size_bytes,json=totalSizeBytes,proto3" json:"total_size_bytes,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *InspectVideoResponse) Reset() {
+	*x = InspectVideoResponse{}
+	mi := &file_proto_video_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *InspectVideoResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*InspectVideoResponse) ProtoMessage() {}
+
+func (x *InspectVideoResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_video_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use InspectVideoResponse.ProtoReflect.Descriptor instead.
+func (*InspectVideoResponse) Descriptor() ([]byte, []int) {
+	return file_proto_video_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *InspectVideoResponse) GetVideoId() string {
+	if x != nil {
+		return x.VideoId
+	}
+	return ""
+}
+
+func (x *InspectVideoResponse) GetFound() bool {
+	if x != nil {
+		return x.Found
+	}
+	return false
+}
+
+func (x *InspectVideoResponse) GetOriginalPath() string {
+	if x != nil {
+		return x.OriginalPath
+	}
+	return ""
+}
+
+func (x *InspectVideoResponse) GetOriginalSize() int64 {
+	if x != nil {
+		return x.OriginalSize
+	}
+	return 0
+}
+
+func (x *InspectVideoResponse) GetHasMaster() bool {
+	if x != nil {
+		return x.HasMaster
+	}
+	return false
+}
+
+func (x *InspectVideoResponse) GetResolutions() []*ResolutionInfo {
+	if x != nil {
+		return x.Resolutions
+	}
+	return nil
+}
+
+func (x *InspectVideoResponse) GetTotalSizeBytes() int64 {
+	if x != nil {
+		return x.TotalSizeBytes
+	}
+	return 0
+}
+
+// Example request:
+//
+//	video_id: "teste"
 type DeleteVideoRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	VideoId       string                 `protobuf:"bytes,1,opt,name=video_id,json=videoId,proto3" json:"video_id,omitempty"`
@@ -582,7 +1016,7 @@ type DeleteVideoRequest struct {
 
 func (x *DeleteVideoRequest) Reset() {
 	*x = DeleteVideoRequest{}
-	mi := &file_proto_video_proto_msgTypes[7]
+	mi := &file_proto_video_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -594,7 +1028,7 @@ func (x *DeleteVideoRequest) String() string {
 func (*DeleteVideoRequest) ProtoMessage() {}
 
 func (x *DeleteVideoRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_video_proto_msgTypes[7]
+	mi := &file_proto_video_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -607,7 +1041,7 @@ func (x *DeleteVideoRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteVideoRequest.ProtoReflect.Descriptor instead.
 func (*DeleteVideoRequest) Descriptor() ([]byte, []int) {
-	return file_proto_video_proto_rawDescGZIP(), []int{7}
+	return file_proto_video_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *DeleteVideoRequest) GetVideoId() string {
@@ -617,6 +1051,10 @@ func (x *DeleteVideoRequest) GetVideoId() string {
 	return ""
 }
 
+// Example response:
+//
+//	success: true
+//	message: "video teste and all related files deleted"
 type DeleteVideoResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
@@ -627,7 +1065,7 @@ type DeleteVideoResponse struct {
 
 func (x *DeleteVideoResponse) Reset() {
 	*x = DeleteVideoResponse{}
-	mi := &file_proto_video_proto_msgTypes[8]
+	mi := &file_proto_video_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -639,7 +1077,7 @@ func (x *DeleteVideoResponse) String() string {
 func (*DeleteVideoResponse) ProtoMessage() {}
 
 func (x *DeleteVideoResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_video_proto_msgTypes[8]
+	mi := &file_proto_video_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -652,7 +1090,7 @@ func (x *DeleteVideoResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteVideoResponse.ProtoReflect.Descriptor instead.
 func (*DeleteVideoResponse) Descriptor() ([]byte, []int) {
-	return file_proto_video_proto_rawDescGZIP(), []int{8}
+	return file_proto_video_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *DeleteVideoResponse) GetSuccess() bool {
@@ -680,34 +1118,68 @@ const file_proto_video_proto_rawDesc = "" +
 	"\vresolutions\x18\x03 \x03(\x0e2\x11.video.ResolutionR\vresolutions\"J\n" +
 	"\x16TranscodeVideoResponse\x12\x15\n" +
 	"\x06job_id\x18\x01 \x01(\tR\x05jobId\x12\x19\n" +
-	"\bvideo_id\x18\x02 \x01(\tR\avideoId\")\n" +
-	"\x10JobStatusRequest\x12\x15\n" +
-	"\x06job_id\x18\x01 \x01(\tR\x05jobId\"\xf8\x01\n" +
+	"\bvideo_id\x18\x02 \x01(\tR\avideoId\"\x94\x02\n" +
 	"\x12ResolutionProgress\x121\n" +
 	"\n" +
 	"resolution\x18\x01 \x01(\x0e2\x11.video.ResolutionR\n" +
 	"resolution\x12(\n" +
-	"\x06status\x18\x02 \x01(\x0e2\x10.video.JobStatusR\x06status\x12!\n" +
-	"\flast_segment\x18\x03 \x01(\x05R\vlastSegment\x12%\n" +
-	"\x0etotal_segments\x18\x04 \x01(\x05R\rtotalSegments\x12%\n" +
-	"\x0ethumbnail_done\x18\x05 \x01(\bR\rthumbnailDone\x12\x14\n" +
-	"\x05error\x18\x06 \x01(\tR\x05error\"\xa1\x02\n" +
+	"\x06status\x18\x02 \x01(\x0e2\x10.video.JobStatusR\x06status\x12#\n" +
+	"\rsegments_done\x18\x03 \x01(\x05R\fsegmentsDone\x12%\n" +
+	"\x0etotal_segments\x18\x04 \x01(\x05R\rtotalSegments\x12\x18\n" +
+	"\apercent\x18\x05 \x01(\x05R\apercent\x12%\n" +
+	"\x0ethumbnail_done\x18\x06 \x01(\bR\rthumbnailDone\x12\x14\n" +
+	"\x05error\x18\a \x01(\tR\x05error\"\x88\x03\n" +
 	"\x11JobStatusResponse\x12\x15\n" +
 	"\x06job_id\x18\x01 \x01(\tR\x05jobId\x12\x19\n" +
 	"\bvideo_id\x18\x02 \x01(\tR\avideoId\x12(\n" +
 	"\x06status\x18\x03 \x01(\x0e2\x10.video.JobStatusR\x06status\x125\n" +
-	"\bprogress\x18\x04 \x03(\v2\x19.video.ResolutionProgressR\bprogress\x12%\n" +
-	"\x0eoriginal_width\x18\x05 \x01(\x05R\roriginalWidth\x12'\n" +
-	"\x0foriginal_height\x18\x06 \x01(\x05R\x0eoriginalHeight\x12)\n" +
-	"\x10duration_seconds\x18\a \x01(\x01R\x0fdurationSeconds\"Q\n" +
+	"\bprogress\x18\x04 \x03(\v2\x19.video.ResolutionProgressR\bprogress\x12'\n" +
+	"\x0foverall_percent\x18\x05 \x01(\x05R\x0eoverallPercent\x12%\n" +
+	"\x0eoriginal_width\x18\x06 \x01(\x05R\roriginalWidth\x12'\n" +
+	"\x0foriginal_height\x18\a \x01(\x05R\x0eoriginalHeight\x12)\n" +
+	"\x10duration_seconds\x18\b \x01(\x01R\x0fdurationSeconds\x12\x1d\n" +
+	"\n" +
+	"created_at\x18\t \x01(\tR\tcreatedAt\x12\x1d\n" +
+	"\n" +
+	"updated_at\x18\n" +
+	" \x01(\tR\tupdatedAt\"M\n" +
+	"\x0fWatchJobRequest\x12\x19\n" +
+	"\bvideo_id\x18\x01 \x01(\tR\avideoId\x12\x1f\n" +
+	"\vinterval_ms\x18\x02 \x01(\x05R\n" +
+	"intervalMs\"y\n" +
+	"\x0fListJobsRequest\x125\n" +
+	"\rfilter_status\x18\x01 \x01(\x0e2\x10.video.JobStatusR\ffilterStatus\x12\x12\n" +
+	"\x04page\x18\x02 \x01(\x05R\x04page\x12\x1b\n" +
+	"\tpage_size\x18\x03 \x01(\x05R\bpageSize\"\x87\x01\n" +
+	"\x10ListJobsResponse\x12,\n" +
+	"\x04jobs\x18\x01 \x03(\v2\x18.video.JobStatusResponseR\x04jobs\x12\x14\n" +
+	"\x05total\x18\x02 \x01(\x05R\x05total\x12\x12\n" +
+	"\x04page\x18\x03 \x01(\x05R\x04page\x12\x1b\n" +
+	"\tpage_size\x18\x04 \x01(\x05R\bpageSize\"2\n" +
 	"\x15GetHLSManifestRequest\x12\x19\n" +
-	"\bvideo_id\x18\x01 \x01(\tR\avideoId\x12\x1d\n" +
-	"\n" +
-	"expires_in\x18\x02 \x01(\x05R\texpiresIn\"I\n" +
+	"\bvideo_id\x18\x01 \x01(\tR\avideoId\"*\n" +
 	"\x16GetHLSManifestResponse\x12\x10\n" +
-	"\x03url\x18\x01 \x01(\tR\x03url\x12\x1d\n" +
+	"\x03url\x18\x01 \x01(\tR\x03url\"0\n" +
+	"\x13InspectVideoRequest\x12\x19\n" +
+	"\bvideo_id\x18\x01 \x01(\tR\avideoId\"\xcf\x01\n" +
+	"\x0eResolutionInfo\x121\n" +
 	"\n" +
-	"expires_in\x18\x02 \x01(\x05R\texpiresIn\"/\n" +
+	"resolution\x18\x01 \x01(\x0e2\x11.video.ResolutionR\n" +
+	"resolution\x12#\n" +
+	"\rsegment_count\x18\x02 \x01(\x05R\fsegmentCount\x12!\n" +
+	"\fhas_playlist\x18\x03 \x01(\bR\vhasPlaylist\x12#\n" +
+	"\rhas_thumbnail\x18\x04 \x01(\bR\fhasThumbnail\x12\x1d\n" +
+	"\n" +
+	"size_bytes\x18\x05 \x01(\x03R\tsizeBytes\"\x93\x02\n" +
+	"\x14InspectVideoResponse\x12\x19\n" +
+	"\bvideo_id\x18\x01 \x01(\tR\avideoId\x12\x14\n" +
+	"\x05found\x18\x02 \x01(\bR\x05found\x12#\n" +
+	"\roriginal_path\x18\x03 \x01(\tR\foriginalPath\x12#\n" +
+	"\roriginal_size\x18\x04 \x01(\x03R\foriginalSize\x12\x1d\n" +
+	"\n" +
+	"has_master\x18\x05 \x01(\bR\thasMaster\x127\n" +
+	"\vresolutions\x18\x06 \x03(\v2\x15.video.ResolutionInfoR\vresolutions\x12(\n" +
+	"\x10total_size_bytes\x18\a \x01(\x03R\x0etotalSizeBytes\"/\n" +
 	"\x12DeleteVideoRequest\x12\x19\n" +
 	"\bvideo_id\x18\x01 \x01(\tR\avideoId\"I\n" +
 	"\x13DeleteVideoResponse\x12\x18\n" +
@@ -727,11 +1199,13 @@ const file_proto_video_proto_rawDesc = "" +
 	"\x12JOB_STATUS_PENDING\x10\x01\x12\x19\n" +
 	"\x15JOB_STATUS_PROCESSING\x10\x02\x12\x13\n" +
 	"\x0fJOB_STATUS_DONE\x10\x03\x12\x15\n" +
-	"\x11JOB_STATUS_FAILED\x10\x042\xb5\x02\n" +
+	"\x11JOB_STATUS_FAILED\x10\x042\xb8\x03\n" +
 	"\fVideoService\x12M\n" +
-	"\x0eTranscodeVideo\x12\x1c.video.TranscodeVideoRequest\x1a\x1d.video.TranscodeVideoResponse\x12A\n" +
-	"\fGetJobStatus\x12\x17.video.JobStatusRequest\x1a\x18.video.JobStatusResponse\x12M\n" +
-	"\x0eGetHLSManifest\x12\x1c.video.GetHLSManifestRequest\x1a\x1d.video.GetHLSManifestResponse\x12D\n" +
+	"\x0eTranscodeVideo\x12\x1c.video.TranscodeVideoRequest\x1a\x1d.video.TranscodeVideoResponse\x12>\n" +
+	"\bWatchJob\x12\x16.video.WatchJobRequest\x1a\x18.video.JobStatusResponse0\x01\x12;\n" +
+	"\bListJobs\x12\x16.video.ListJobsRequest\x1a\x17.video.ListJobsResponse\x12M\n" +
+	"\x0eGetHLSManifest\x12\x1c.video.GetHLSManifestRequest\x1a\x1d.video.GetHLSManifestResponse\x12G\n" +
+	"\fInspectVideo\x12\x1a.video.InspectVideoRequest\x1a\x1b.video.InspectVideoResponse\x12D\n" +
 	"\vDeleteVideo\x12\x19.video.DeleteVideoRequest\x1a\x1a.video.DeleteVideoResponseB<Z:github.com/devlucas-java/luca-s3/internal/delivery/grpc/pbb\x06proto3"
 
 var (
@@ -747,39 +1221,52 @@ func file_proto_video_proto_rawDescGZIP() []byte {
 }
 
 var file_proto_video_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_proto_video_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
+var file_proto_video_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
 var file_proto_video_proto_goTypes = []any{
 	(Resolution)(0),                // 0: video.Resolution
 	(JobStatus)(0),                 // 1: video.JobStatus
 	(*TranscodeVideoRequest)(nil),  // 2: video.TranscodeVideoRequest
 	(*TranscodeVideoResponse)(nil), // 3: video.TranscodeVideoResponse
-	(*JobStatusRequest)(nil),       // 4: video.JobStatusRequest
-	(*ResolutionProgress)(nil),     // 5: video.ResolutionProgress
-	(*JobStatusResponse)(nil),      // 6: video.JobStatusResponse
-	(*GetHLSManifestRequest)(nil),  // 7: video.GetHLSManifestRequest
-	(*GetHLSManifestResponse)(nil), // 8: video.GetHLSManifestResponse
-	(*DeleteVideoRequest)(nil),     // 9: video.DeleteVideoRequest
-	(*DeleteVideoResponse)(nil),    // 10: video.DeleteVideoResponse
+	(*ResolutionProgress)(nil),     // 4: video.ResolutionProgress
+	(*JobStatusResponse)(nil),      // 5: video.JobStatusResponse
+	(*WatchJobRequest)(nil),        // 6: video.WatchJobRequest
+	(*ListJobsRequest)(nil),        // 7: video.ListJobsRequest
+	(*ListJobsResponse)(nil),       // 8: video.ListJobsResponse
+	(*GetHLSManifestRequest)(nil),  // 9: video.GetHLSManifestRequest
+	(*GetHLSManifestResponse)(nil), // 10: video.GetHLSManifestResponse
+	(*InspectVideoRequest)(nil),    // 11: video.InspectVideoRequest
+	(*ResolutionInfo)(nil),         // 12: video.ResolutionInfo
+	(*InspectVideoResponse)(nil),   // 13: video.InspectVideoResponse
+	(*DeleteVideoRequest)(nil),     // 14: video.DeleteVideoRequest
+	(*DeleteVideoResponse)(nil),    // 15: video.DeleteVideoResponse
 }
 var file_proto_video_proto_depIdxs = []int32{
 	0,  // 0: video.TranscodeVideoRequest.resolutions:type_name -> video.Resolution
 	0,  // 1: video.ResolutionProgress.resolution:type_name -> video.Resolution
 	1,  // 2: video.ResolutionProgress.status:type_name -> video.JobStatus
 	1,  // 3: video.JobStatusResponse.status:type_name -> video.JobStatus
-	5,  // 4: video.JobStatusResponse.progress:type_name -> video.ResolutionProgress
-	2,  // 5: video.VideoService.TranscodeVideo:input_type -> video.TranscodeVideoRequest
-	4,  // 6: video.VideoService.GetJobStatus:input_type -> video.JobStatusRequest
-	7,  // 7: video.VideoService.GetHLSManifest:input_type -> video.GetHLSManifestRequest
-	9,  // 8: video.VideoService.DeleteVideo:input_type -> video.DeleteVideoRequest
-	3,  // 9: video.VideoService.TranscodeVideo:output_type -> video.TranscodeVideoResponse
-	6,  // 10: video.VideoService.GetJobStatus:output_type -> video.JobStatusResponse
-	8,  // 11: video.VideoService.GetHLSManifest:output_type -> video.GetHLSManifestResponse
-	10, // 12: video.VideoService.DeleteVideo:output_type -> video.DeleteVideoResponse
-	9,  // [9:13] is the sub-list for method output_type
-	5,  // [5:9] is the sub-list for method input_type
-	5,  // [5:5] is the sub-list for extension type_name
-	5,  // [5:5] is the sub-list for extension extendee
-	0,  // [0:5] is the sub-list for field type_name
+	4,  // 4: video.JobStatusResponse.progress:type_name -> video.ResolutionProgress
+	1,  // 5: video.ListJobsRequest.filter_status:type_name -> video.JobStatus
+	5,  // 6: video.ListJobsResponse.jobs:type_name -> video.JobStatusResponse
+	0,  // 7: video.ResolutionInfo.resolution:type_name -> video.Resolution
+	12, // 8: video.InspectVideoResponse.resolutions:type_name -> video.ResolutionInfo
+	2,  // 9: video.VideoService.TranscodeVideo:input_type -> video.TranscodeVideoRequest
+	6,  // 10: video.VideoService.WatchJob:input_type -> video.WatchJobRequest
+	7,  // 11: video.VideoService.ListJobs:input_type -> video.ListJobsRequest
+	9,  // 12: video.VideoService.GetHLSManifest:input_type -> video.GetHLSManifestRequest
+	11, // 13: video.VideoService.InspectVideo:input_type -> video.InspectVideoRequest
+	14, // 14: video.VideoService.DeleteVideo:input_type -> video.DeleteVideoRequest
+	3,  // 15: video.VideoService.TranscodeVideo:output_type -> video.TranscodeVideoResponse
+	5,  // 16: video.VideoService.WatchJob:output_type -> video.JobStatusResponse
+	8,  // 17: video.VideoService.ListJobs:output_type -> video.ListJobsResponse
+	10, // 18: video.VideoService.GetHLSManifest:output_type -> video.GetHLSManifestResponse
+	13, // 19: video.VideoService.InspectVideo:output_type -> video.InspectVideoResponse
+	15, // 20: video.VideoService.DeleteVideo:output_type -> video.DeleteVideoResponse
+	15, // [15:21] is the sub-list for method output_type
+	9,  // [9:15] is the sub-list for method input_type
+	9,  // [9:9] is the sub-list for extension type_name
+	9,  // [9:9] is the sub-list for extension extendee
+	0,  // [0:9] is the sub-list for field type_name
 }
 
 func init() { file_proto_video_proto_init() }
@@ -793,7 +1280,7 @@ func file_proto_video_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_video_proto_rawDesc), len(file_proto_video_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   9,
+			NumMessages:   14,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -1,10 +1,7 @@
 package enums
 
-import (
-	"fmt"
-)
+import "fmt"
 
-// Resolution define as resoluções suportadas para streaming adaptativo.
 type Resolution string
 
 const (
@@ -20,7 +17,6 @@ func (r Resolution) String() string {
 	return string(r)
 }
 
-// Width retorna a largura em pixels.
 func (r Resolution) Width() int {
 	switch r {
 	case RESOLUTION_360P:
@@ -40,7 +36,6 @@ func (r Resolution) Width() int {
 	}
 }
 
-// Height retorna a altura em pixels.
 func (r Resolution) Height() int {
 	switch r {
 	case RESOLUTION_360P:
@@ -60,7 +55,6 @@ func (r Resolution) Height() int {
 	}
 }
 
-// AspectScale retorna o filtro scale do FFmpeg (mantém aspect ratio).
 func (r Resolution) AspectScale() string {
 	return fmt.Sprintf("%d:-2", r.Width())
 }

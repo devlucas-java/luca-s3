@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"fmt"
-	"math"
 	"os"
 	"path/filepath"
 	"time"
@@ -13,7 +12,6 @@ import (
 	minioclient "github.com/devlucas-java/luca-s3/internal/infrastructure/minio"
 	"github.com/devlucas-java/luca-s3/internal/infrastructure/redis"
 	"github.com/devlucas-java/luca-s3/pkg/logger"
-	"github.com/google/uuid"
 )
 
 type TranscodeService struct {
@@ -34,16 +32,18 @@ func NewTranscodeService(minio *minioclient.Client, jobRepo *redis.JobRepository
 	}
 }
 
-// TranscodeVideo inicia transcodificação HLS para um vídeo no MinIO.
 func (s *TranscodeService) TranscodeVideo(
 	ctx context.Context,
 	videoID string,
 	originalPath string,
 	resolutions []enums.Resolution,
 ) (*model.TranscodeJob, error) {
-	log := logger.Instance()
+	if active, err := s.jobRepo.ActiveJobForVideo(ctx, videoID); err != nil {
+		return nil, fmt.Errorf("check active job: %w", err)
+	} else if active != nil {
+		return nil, fmt.Errorf("video %s already has an active job (%s) — wait for it to finish", videoID, active.Status)
+	}
 
-	// Verifica se vídeo existe no MinIO
 	exists, err := s.minio.ObjectExists(ctx, originalPath)
 	if err != nil {
 		return nil, fmt.Errorf("check minio: %w", err)
@@ -52,139 +52,257 @@ func (s *TranscodeService) TranscodeVideo(
 		return nil, fmt.Errorf("video not found in minio: %s", originalPath)
 	}
 
-	// Cria diretório temporário
-	jobID := uuid.New().String()
-	jobDir := filepath.Join(s.workDir, jobID)
-	if err := os.MkdirAll(jobDir, 0755); err != nil {
-		return nil, fmt.Errorf("mkdir: %w", err)
-	}
-	defer os.RemoveAll(jobDir)
-
-	// Download do vídeo original
-	localInput := filepath.Join(jobDir, "input"+filepath.Ext(originalPath))
-	if err := s.minio.DownloadFile(ctx, originalPath, localInput); err != nil {
-		return nil, fmt.Errorf("download: %w", err)
-	}
-
-	// Analisa vídeo para obter dimensões e duração
-	info, err := analyzeVideo(ctx, localInput)
-	if err != nil {
-		return nil, fmt.Errorf("analyze: %w", err)
-	}
-
-	// Filtra resoluções válidas (não maiores que o original)
-	validRes := filterValidResolutions(resolutions, info.Height)
-	if len(validRes) == 0 {
-		return nil, fmt.Errorf("no valid resolutions (original is %dx%d)", info.Width, info.Height)
-	}
-
-	// Cria job
 	job := &model.TranscodeJob{
-		ID:              jobID,
-		VideoID:         videoID,
-		OriginalPath:    originalPath,
-		RequestedRes:    validRes,
-		Status:          enums.JobStatusProcessing,
-		OriginalWidth:   info.Width,
-		OriginalHeight:  info.Height,
-		DurationSeconds: info.Duration,
-		Progress:        make([]model.ResolutionProgress, 0),
-		CreatedAt:       time.Now(),
-		UpdatedAt:       time.Now(),
+		ID:           videoID,
+		VideoID:      videoID,
+		OriginalPath: originalPath,
+		RequestedRes: resolutions,
+		Status:       enums.JobStatusPending,
+		Progress:     make([]model.ResolutionProgress, 0),
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
 	}
 
 	if err := s.jobRepo.Save(ctx, job); err != nil {
 		return nil, fmt.Errorf("save job: %w", err)
 	}
 
-	// Processa cada resolução
+	go s.process(job)
+	return job, nil
+}
+
+func (s *TranscodeService) process(job *model.TranscodeJob) {
+	log := logger.Instance()
+	ctx := context.Background()
+
+	log.Infof("transcode: video=%s started", job.VideoID)
+
+	job.Status = enums.JobStatusProcessing
+	job.UpdatedAt = time.Now()
+	_ = s.jobRepo.Update(ctx, job)
+
+	jobDir := filepath.Join(s.workDir, job.VideoID)
+	if err := os.MkdirAll(jobDir, 0755); err != nil {
+		s.failJob(ctx, job, fmt.Errorf("mkdir: %w", err))
+		return
+	}
+	defer os.RemoveAll(jobDir)
+
+	localInput := filepath.Join(jobDir, "input"+filepath.Ext(job.OriginalPath))
+	if err := s.minio.DownloadFile(ctx, job.OriginalPath, localInput); err != nil {
+		s.failJob(ctx, job, fmt.Errorf("download: %w", err))
+		return
+	}
+
+	info, err := analyzeVideo(ctx, localInput)
+	if err != nil {
+		s.failJob(ctx, job, fmt.Errorf("analyze: %w", err))
+		return
+	}
+
+	job.OriginalWidth = info.Width
+	job.OriginalHeight = info.Height
+	job.DurationSeconds = info.Duration
+	_ = s.jobRepo.Update(ctx, job)
+
+	if info.Is360 {
+		log.Infof("transcode: video=%s detected as 360° (%s)", job.VideoID, info.Projection)
+	}
+
+	validRes := filterValidResolutions(job.RequestedRes, info.Height)
+	if len(validRes) == 0 {
+		s.failJob(ctx, job, fmt.Errorf("no valid resolutions for %dx%d", info.Width, info.Height))
+		return
+	}
+
+	expectedSegments := calcTotalSegments(info.Duration)
+
 	for _, res := range validRes {
-		progress := model.ResolutionProgress{
-			Resolution: res,
-			Status:     enums.JobStatusProcessing,
+		existing := countSegments(ctx, s.minio, job.VideoID, res)
+		alreadyDone := existing >= expectedSegments-segmentTolerance
+
+		entry := model.ResolutionProgress{
+			Resolution:    res,
+			TotalSegments: expectedSegments,
 		}
 
-		// Verifica último segmento existente no MinIO
-		lastSegment := getLastSegmentNumber(ctx, s.minio, videoID, res)
-		progress.LastSegment = lastSegment
-		progress.TotalSegments = int(math.Ceil(info.Duration / segmentDuration))
-
-		log.Infof("transcode: video=%s res=%s resuming from segment %d/%d",
-			videoID, res, lastSegment+1, progress.TotalSegments)
-
-		// Transcoda HLS (retoma de onde parou)
-		segmentCount, err := transcodeToHLS(ctx, s.minio, videoID, res, localInput, jobDir, lastSegment+1)
-		if err != nil {
-			log.Errorf("transcode: video=%s res=%s: %v", videoID, res, err)
-			progress.Status = enums.JobStatusFailed
-			progress.Error = err.Error()
+		if alreadyDone {
+			entry.Status = enums.JobStatusDone
+			entry.SegmentsDone = expectedSegments
+			entry.Percent = 100
+			log.Infof("transcode: video=%s res=%s already complete (%d/%d segments) — skipping",
+				job.VideoID, res, existing, expectedSegments)
 		} else {
-			progress.LastSegment = lastSegment + segmentCount
-			progress.Status = enums.JobStatusDone
+			entry.Status = enums.JobStatusPending
+			entry.SegmentsDone = existing
 		}
 
-		// Gera thumbnail para esta resolução
-		if progress.Status == enums.JobStatusDone {
-			thumbErr := generateResolutionThumbnail(ctx, s.minio, localInput, jobDir, videoID, res)
-			progress.ThumbnailDone = (thumbErr == nil)
+		job.Progress = append(job.Progress, entry)
+	}
+	_ = s.jobRepo.Update(ctx, job)
+
+	allDone := true
+	for _, p := range job.Progress {
+		if p.Status != enums.JobStatusDone {
+			allDone = false
+			break
+		}
+	}
+	if allDone {
+		log.Infof("transcode: video=%s all resolutions already complete — nothing to do", job.VideoID)
+		job.Status = enums.JobStatusDone
+		job.UpdatedAt = time.Now()
+		_ = s.jobRepo.Update(ctx, job)
+		return
+	}
+
+	for i := range job.Progress {
+		p := &job.Progress[i]
+
+		if p.Status == enums.JobStatusDone {
+			continue
+		}
+
+		startSeg := getLastSegmentNumber(ctx, s.minio, job.VideoID, p.Resolution) + 1
+
+		p.Status = enums.JobStatusProcessing
+		_ = s.jobRepo.Update(ctx, job)
+
+		log.Infof("transcode: video=%s res=%s start_seg=%d expected=%d",
+			job.VideoID, p.Resolution, startSeg, p.TotalSegments)
+
+		onProgress := func(segsDone int) {
+			p.SegmentsDone = startSeg + segsDone
+			if p.TotalSegments > 0 {
+				p.Percent = min(100, p.SegmentsDone*100/p.TotalSegments)
+			}
+			job.UpdatedAt = time.Now()
+			_ = s.jobRepo.Update(ctx, job)
+		}
+
+		count, err := transcodeToHLS(
+			ctx, s.minio, job.VideoID, p.Resolution,
+			localInput, jobDir, startSeg, p.TotalSegments, onProgress,
+			info.Is360,
+		)
+
+		if err != nil {
+			log.Errorf("transcode: video=%s res=%s: %v", job.VideoID, p.Resolution, err)
+			p.Status = enums.JobStatusFailed
+			p.Error = err.Error()
+		} else {
+			p.SegmentsDone = startSeg + count
+			p.Percent = 100
+			p.Status = enums.JobStatusDone
+		}
+
+		if p.Status == enums.JobStatusDone {
+			thumbErr := generateResolutionThumbnail(ctx, s.minio, localInput, jobDir, job.VideoID, p.Resolution)
+			p.ThumbnailDone = thumbErr == nil
 			if thumbErr != nil {
-				log.Warnf("transcode: thumbnail video=%s res=%s: %v", videoID, res, thumbErr)
+				log.Warnf("transcode: video=%s res=%s thumbnail: %v", job.VideoID, p.Resolution, thumbErr)
 			}
 		}
 
-		job.Progress = append(job.Progress, progress)
+		job.UpdatedAt = time.Now()
+		_ = s.jobRepo.Update(ctx, job)
 	}
 
-	// Gera master playlist
-	if err := s.generateMasterPlaylist(ctx, videoID, validRes); err != nil {
-		log.Errorf("transcode: master playlist video=%s: %v", videoID, err)
+	if err := s.generateMasterPlaylist(ctx, job.VideoID, validRes); err != nil {
+		log.Errorf("transcode: video=%s master playlist: %v", job.VideoID, err)
 	}
 
 	job.Finalize()
 	job.UpdatedAt = time.Now()
-	if err := s.jobRepo.Update(ctx, job); err != nil {
-		log.Errorf("transcode: update job %s: %v", jobID, err)
-	}
+	_ = s.jobRepo.Update(ctx, job)
 
-	log.Infof("transcode: job=%s video=%s status=%s", jobID, videoID, job.Status)
-	return job, nil
+	log.Infof("transcode: video=%s finished status=%s overall=%d%%",
+		job.VideoID, job.Status, job.OverallPercent())
 }
 
-// DeleteVideo deletes all video files from MinIO.
-func (s *TranscodeService) DeleteVideo(ctx context.Context, videoID string) error {
-	log := logger.Instance()
-
-	// Delete entire video folder
-	prefix := fmt.Sprintf("videos/%s/", videoID)
-	if err := s.minio.DeleteFolder(ctx, prefix); err != nil {
-		return fmt.Errorf("delete folder: %w", err)
-	}
-
-	// Delete jobs related to this video
-	jobs, err := s.jobRepo.FindByVideoID(ctx, videoID)
-	if err == nil {
-		for _, job := range jobs {
-			_ = s.jobRepo.Delete(ctx, job.ID)
-		}
-	}
-
-	log.Infof("delete: video=%s deleted", videoID)
-	return nil
+func (s *TranscodeService) failJob(ctx context.Context, job *model.TranscodeJob, err error) {
+	logger.Instance().Errorf("transcode: video=%s failed: %v", job.VideoID, err)
+	job.Status = enums.JobStatusFailed
+	job.UpdatedAt = time.Now()
+	_ = s.jobRepo.Update(ctx, job)
 }
 
-// GetJob retorna o status de um job.
-func (s *TranscodeService) GetJob(ctx context.Context, jobID string) (*model.TranscodeJob, error) {
-	return s.jobRepo.FindByID(ctx, jobID)
-}
-
-// GetJobsByVideo retorna todos os jobs de um vídeo.
-func (s *TranscodeService) GetJobsByVideo(ctx context.Context, videoID string) ([]*model.TranscodeJob, error) {
+func (s *TranscodeService) GetJob(ctx context.Context, videoID string) (*model.TranscodeJob, error) {
 	return s.jobRepo.FindByVideoID(ctx, videoID)
 }
 
-// generateMasterPlaylist cria o master playlist HLS.
+func (s *TranscodeService) ListJobs(ctx context.Context, filterStatus enums.JobStatus, page, pageSize int) ([]*model.TranscodeJob, int, error) {
+	all, err := s.jobRepo.ListAll(ctx)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	filtered := all
+	if filterStatus != "" {
+		filtered = make([]*model.TranscodeJob, 0, len(all))
+		for _, j := range all {
+			if j.Status == filterStatus {
+				filtered = append(filtered, j)
+			}
+		}
+	}
+
+	total := len(filtered)
+
+	if pageSize <= 0 {
+		pageSize = 20
+	}
+	if pageSize > 100 {
+		pageSize = 100
+	}
+
+	if page < 1 {
+		page = 1
+	}
+	start := (page - 1) * pageSize
+	if start >= total {
+		return []*model.TranscodeJob{}, total, nil
+	}
+	end := start + pageSize
+	if end > total {
+		end = total
+	}
+
+	return filtered[start:end], total, nil
+}
+
+func (s *TranscodeService) DeleteVideo(ctx context.Context, videoID string) error {
+	log := logger.Instance()
+
+	if active, err := s.jobRepo.ActiveJobForVideo(ctx, videoID); err != nil {
+		return fmt.Errorf("check active job: %w", err)
+	} else if active != nil {
+		return fmt.Errorf("cannot delete: video %s has an active job (%s) — wait for it to finish", videoID, active.Status)
+	}
+
+	objects := s.minio.ListObjects(ctx, fmt.Sprintf("%s", videoID))
+	if len(objects) == 0 {
+		return fmt.Errorf("video not found: no files in MinIO for video_id %q", videoID)
+	}
+
+	if err := s.minio.DeleteFolder(ctx, fmt.Sprintf("%s/", videoID)); err != nil {
+		return fmt.Errorf("delete minio folder: %w", err)
+	}
+
+	for _, obj := range objects {
+		_ = s.minio.DeleteObject(ctx, obj)
+	}
+
+	if job, err := s.jobRepo.FindByVideoID(ctx, videoID); err == nil {
+		_ = s.jobRepo.Delete(ctx, job.ID)
+	}
+
+	log.Infof("delete: video=%s deleted (%d objects removed)", videoID, len(objects))
+	return nil
+}
+
 func (s *TranscodeService) generateMasterPlaylist(ctx context.Context, videoID string, resolutions []enums.Resolution) error {
-	tmpFile := filepath.Join(s.workDir, "master.m3u8")
+	tmpFile := filepath.Join(s.workDir, "master_"+videoID+".m3u8")
 	f, err := os.Create(tmpFile)
 	if err != nil {
 		return fmt.Errorf("create master: %w", err)
@@ -196,12 +314,11 @@ func (s *TranscodeService) generateMasterPlaylist(ctx context.Context, videoID s
 	fmt.Fprintln(f, "#EXT-X-VERSION:3")
 
 	for _, res := range resolutions {
-		bandwidth := res.Width() * res.Height() * 2 // estimativa
+		bandwidth := res.Width() * res.Height() * 2
 		fmt.Fprintf(f, "#EXT-X-STREAM-INF:BANDWIDTH=%d,RESOLUTION=%dx%d\n",
 			bandwidth, res.Width(), res.Height())
 		fmt.Fprintf(f, "%s/playlist.m3u8\n", res.String())
 	}
 
-	minioPath := fmt.Sprintf("videos/%s/hls/master.m3u8", videoID)
-	return s.minio.UploadFile(ctx, minioPath, tmpFile, "application/vnd.apple.mpegurl")
+	return s.minio.UploadFile(ctx, fmt.Sprintf("%s/hls/master.m3u8", videoID), tmpFile, "application/vnd.apple.mpegurl")
 }

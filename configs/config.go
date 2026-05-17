@@ -51,7 +51,6 @@ func LoadConfig() (*Config, error) {
 	}, nil
 }
 
-// Validate checks required fields.
 func (c *Config) Validate() error {
 	required := map[string]string{
 		"REDIS_ADDR":       c.RedisAddr,

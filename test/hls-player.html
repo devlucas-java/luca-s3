@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>HLS Player — Luca-S3</title>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: system-ui, sans-serif;
+      background: #0f0f0f;
+      color: #e0e0e0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center; 
+      padding: 2rem 1rem;
+      gap: 1.5rem;
+    }
+
+    h1 { font-size: 1.4rem; font-weight: 600; color: #fff; }
+
+    .card {
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 12px;
+      padding: 1.5rem;
+      width: 100%;
+      max-width: 860px;
+    }
+
+    .card label {
+      display: block;
+      font-size: 0.8rem;
+      color: #888;
+      margin-bottom: 0.4rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .input-row { display: flex; gap: 0.5rem; }
+
+    input[type="text"] {
+      flex: 1;
+      background: #111;
+      border: 1px solid #333;
+      border-radius: 8px;
+      color: #e0e0e0;
+      font-size: 0.9rem;
+      padding: 0.6rem 0.9rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    input[type="text"]:focus { border-color: #555; }
+
+    button {
+      background: #2563eb;
+      border: none;
+      border-radius: 8px;
+      color: #fff;
+      cursor: pointer;
+      font-size: 0.9rem;
+      font-weight: 500;
+      padding: 0.6rem 1.2rem;
+      transition: background 0.2s;
+      white-space: nowrap;
+    }
+    button:hover { background: #1d4ed8; }
+    button.danger { background: #dc2626; }
+    button.danger:hover { background: #b91c1c; }
+    button.secondary { background: #374151; }
+    button.secondary:hover { background: #4b5563; }
+
+    video { width: 100%; border-radius: 8px; background: #000; display: block; }
+
+    .status {
+      font-size: 0.82rem;
+      padding: 0.5rem 0.8rem;
+      border-radius: 6px;
+      margin-top: 0.8rem;
+    }
+    .status.info    { background: #1e3a5f; color: #93c5fd; }
+    .status.success { background: #14532d; color: #86efac; }
+    .status.error   { background: #450a0a; color: #fca5a5; }
+    .status.hidden  { display: none; }
+
+    .levels { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.8rem; }
+
+    .level-btn {
+      background: #222;
+      border: 1px solid #333;
+      border-radius: 6px;
+      color: #aaa;
+      cursor: pointer;
+      font-size: 0.78rem;
+      padding: 0.3rem 0.7rem;
+      transition: all 0.15s;
+    }
+    .level-btn:hover  { border-color: #555; color: #fff; }
+    .level-btn.active { background: #2563eb; border-color: #2563eb; color: #fff; }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 0.6rem;
+      margin-top: 0.8rem;
+    }
+    .stat { background: #111; border: 1px solid #222; border-radius: 8px; padding: 0.6rem 0.8rem; }
+    .stat .label { font-size: 0.72rem; color: #666; text-transform: uppercase; }
+    .stat .value { font-size: 1rem; font-weight: 600; color: #e0e0e0; margin-top: 0.2rem; }
+
+    .presets { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.6rem; }
+    .preset-btn {
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 6px;
+      color: #888;
+      cursor: pointer;
+      font-size: 0.75rem;
+      padding: 0.25rem 0.6rem;
+      transition: all 0.15s;
+    }
+    .preset-btn:hover { border-color: #444; color: #ccc; }
+
+    /* ── Progress panel ── */
+    .progress-panel { display: flex; flex-direction: column; gap: 0.8rem; }
+
+    .res-row { display: flex; flex-direction: column; gap: 0.3rem; }
+    .res-header { display: flex; justify-content: space-between; align-items: center; }
+    .res-name { font-size: 0.85rem; font-weight: 600; }
+    .res-pct  { font-size: 0.8rem; color: #888; }
+
+    .bar-track {
+      height: 6px;
+      background: #222;
+      border-radius: 99px;
+      overflow: hidden;
+    }
+    .bar-fill {
+      height: 100%;
+      border-radius: 99px;
+      background: #2563eb;
+      transition: width 0.4s ease;
+    }
+    .bar-fill.done   { background: #16a34a; }
+    .bar-fill.failed { background: #dc2626; }
+
+    .overall-row {
+      display: flex;
+      align-items: center;
+      gap: 0.8rem;
+      padding-top: 0.4rem;
+      border-top: 1px solid #222;
+    }
+    .overall-label { font-size: 0.8rem; color: #888; white-space: nowrap; }
+    .overall-pct   { font-size: 1.1rem; font-weight: 700; color: #fff; white-space: nowrap; }
+    .overall-track { flex: 1; height: 8px; background: #222; border-radius: 99px; overflow: hidden; }
+    .overall-fill  { height: 100%; border-radius: 99px; background: #2563eb; transition: width 0.4s ease; }
+    .overall-fill.done { background: #16a34a; }
+
+    .tabs { display: flex; gap: 0.4rem; margin-bottom: 1rem; }
+    .tab {
+      background: #111;
+      border: 1px solid #2a2a2a;
+      border-radius: 8px;
+      color: #888;
+      cursor: pointer;
+      font-size: 0.82rem;
+      padding: 0.4rem 0.9rem;
+      transition: all 0.15s;
+    }
+    .tab.active { background: #1e3a5f; border-color: #2563eb; color: #93c5fd; }
+  </style>
+</head>
+<body>
+
+  <h1>🎬 HLS Player — Luca-S3</h1>
+
+  <!-- URL Input -->
+  <div class="card">
+    <label>HLS Manifest URL (.m3u8)</label>
+    <div class="input-row">
+      <input type="text" id="urlInput" placeholder="http://localhost:9000/luca-s3/{id}/hls/master.m3u8" />
+      <button id="loadBtn" onclick="loadStream()">Load</button>
+    </div>
+
+    <!-- Quick presets -->
+    <div class="presets">
+      <span style="font-size:0.75rem;color:#555;align-self:center;">Presets:</span>
+      <button class="preset-btn" onclick="setPreset('http://localhost:9000/luca-s3/teste/hls/master.m3u8')">localhost test</button>
+      <button class="preset-btn" onclick="setPreset('https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8')">Mux demo</button>
+      <button class="preset-btn" onclick="setPreset('https://devstreaming-cdn.apple.com/videos/streaming/examples/img_bipbop_adv_example_fmp4/master.m3u8')">Apple demo</button>
+    </div>
+
+    <div id="status" class="status hidden"></div>
+  </div>
+
+  <!-- Player -->
+  <div class="card">
+    <video id="video" controls playsinline></video>
+
+    <!-- Quality levels -->
+    <div id="levelsContainer" style="display:none">
+      <label style="margin-top:1rem">Quality</label>
+      <div class="levels" id="levels"></div>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats">
+      <div class="stat">
+        <div class="label">Resolution</div>
+        <div class="value" id="statRes">—</div>
+      </div>
+      <div class="stat">
+        <div class="label">Bitrate</div>
+        <div class="value" id="statBitrate">—</div>
+      </div>
+      <div class="stat">
+        <div class="label">Buffer</div>
+        <div class="value" id="statBuffer">—</div>
+      </div>
+      <div class="stat">
+        <div class="label">Dropped Frames</div>
+        <div class="value" id="statDropped">—</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let hls = null;
+
+    function setPreset(url) {
+      document.getElementById('urlInput').value = url;
+    }
+
+    function setStatus(msg, type) {
+      const el = document.getElementById('status');
+      el.textContent = msg;
+      el.className = 'status ' + type;
+    }
+
+    function loadStream() {
+      const url = document.getElementById('urlInput').value.trim();
+      if (!url) { setStatus('Please enter a URL.', 'error'); return; }
+
+      const video = document.getElementById('video');
+
+      // Destroy previous instance
+      if (hls) { hls.destroy(); hls = null; }
+
+      setStatus('Loading…', 'info');
+
+      if (Hls.isSupported()) {
+        hls = new Hls({
+          enableWorker: true,
+          lowLatencyMode: false,
+        });
+
+        hls.loadSource(url);
+        hls.attachMedia(video);
+
+        hls.on(Hls.Events.MANIFEST_PARSED, (_, data) => {
+          setStatus(`✅ Manifest loaded — ${data.levels.length} quality level(s)`, 'success');
+          renderLevels(data.levels);
+          video.play().catch(() => {});
+        });
+
+        hls.on(Hls.Events.LEVEL_SWITCHED, (_, data) => {
+          const level = hls.levels[data.level];
+          if (level) {
+            document.getElementById('statRes').textContent =
+              `${level.width}×${level.height}`;
+            document.getElementById('statBitrate').textContent =
+              `${(level.bitrate / 1000).toFixed(0)} kbps`;
+          }
+          updateActiveLevel(data.level);
+        });
+
+        hls.on(Hls.Events.ERROR, (_, data) => {
+          if (data.fatal) {
+            setStatus(`❌ Fatal error: ${data.details}`, 'error');
+          }
+        });
+
+      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        // Safari native HLS
+        video.src = url;
+        video.addEventListener('loadedmetadata', () => {
+          setStatus('✅ Loaded (native HLS)', 'success');
+          video.play().catch(() => {});
+        });
+      } else {
+        setStatus('❌ HLS not supported in this browser.', 'error');
+      }
+
+      // Stats loop
+      startStatsLoop(video);
+    }
+
+    function renderLevels(levels) {
+      const container = document.getElementById('levelsContainer');
+      const el = document.getElementById('levels');
+      el.innerHTML = '';
+      container.style.display = 'block';
+
+      // Auto button
+      const auto = document.createElement('button');
+      auto.className = 'level-btn active';
+      auto.id = 'level-auto';
+      auto.textContent = 'Auto';
+      auto.onclick = () => { hls.currentLevel = -1; updateActiveLevel(-1); };
+      el.appendChild(auto);
+
+      levels.forEach((level, i) => {
+        const btn = document.createElement('button');
+        btn.className = 'level-btn';
+        btn.id = `level-${i}`;
+        btn.textContent = `${level.height}p`;
+        btn.onclick = () => { hls.currentLevel = i; updateActiveLevel(i); };
+        el.appendChild(btn);
+      });
+    }
+
+    function updateActiveLevel(index) {
+      document.querySelectorAll('.level-btn').forEach(b => b.classList.remove('active'));
+      const id = index === -1 ? 'level-auto' : `level-${index}`;
+      const btn = document.getElementById(id);
+      if (btn) btn.classList.add('active');
+    }
+
+    function startStatsLoop(video) {
+      setInterval(() => {
+        // Buffer
+        if (video.buffered.length > 0) {
+          const buffered = video.buffered.end(video.buffered.length - 1) - video.currentTime;
+          document.getElementById('statBuffer').textContent = `${buffered.toFixed(1)}s`;
+        }
+        // Dropped frames
+        if (video.getVideoPlaybackQuality) {
+          const q = video.getVideoPlaybackQuality();
+          document.getElementById('statDropped').textContent = q.droppedVideoFrames;
+        }
+      }, 1000);
+    }
+
+    // Load on Enter key
+    document.getElementById('urlInput').addEventListener('keydown', e => {
+      if (e.key === 'Enter') loadStream();
+    });
+  </script>
+
+</body>
+</html>

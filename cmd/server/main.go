@@ -37,7 +37,8 @@ func main() {
 	}
 
 	transcodeSvc := service.NewTranscodeService(minio, jobRepo)
-	handler := grpcserver.NewHandler(transcodeSvc, minio)
+	inspectSvc := service.NewInspectService(minio)
+	handler := grpcserver.NewHandler(transcodeSvc, inspectSvc, minio)
 	grpcSrv := grpcserver.NewServer(handler)
 
 	log.Info("worker ready - MinIO is the source of truth, Redis for job state")

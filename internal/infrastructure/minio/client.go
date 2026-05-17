@@ -4,16 +4,17 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"time"
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
-const bucketName = "videos"
+const bucketName = "luca-s3"
 
 type Client struct {
-	client *minio.Client
+	client   *minio.Client
+	endpoint string
+	useSSL   bool
 }
 
 func New(endpoint, accessKey, secretKey string, useSSL bool) (*Client, error) {
@@ -36,7 +37,20 @@ func New(endpoint, accessKey, secretKey string, useSSL bool) (*Client, error) {
 		}
 	}
 
-	return &Client{client: minioClient}, nil
+	policy := `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"AWS":["*"]},"Action":["s3:GetObject"],"Resource":["arn:aws:s3:::` + bucketName + `/*"]}]}`
+	if err := minioClient.SetBucketPolicy(ctx, bucketName, policy); err != nil {
+		return nil, fmt.Errorf("minio: set public policy: %w", err)
+	}
+
+	return &Client{client: minioClient, endpoint: endpoint, useSSL: useSSL}, nil
+}
+
+func (c *Client) PublicURL(objectName string) string {
+	scheme := "http"
+	if c.useSSL {
+		scheme = "https"
+	}
+	return fmt.Sprintf("%s://%s/%s/%s", scheme, c.endpoint, bucketName, objectName)
 }
 
 func (c *Client) UploadObject(ctx context.Context, objectName string, reader io.Reader, size int64, contentType string) error {
@@ -78,7 +92,6 @@ func (c *Client) DeleteFolder(ctx context.Context, prefix string) error {
 		Prefix:    prefix,
 		Recursive: true,
 	})
-
 	for obj := range objectsCh {
 		if obj.Err != nil {
 			return obj.Err
@@ -90,21 +103,19 @@ func (c *Client) DeleteFolder(ctx context.Context, prefix string) error {
 	return nil
 }
 
-func (c *Client) PresignedURL(ctx context.Context, objectName string, expiry time.Duration) (string, error) {
-	url, err := c.client.PresignedGetObject(ctx, bucketName, objectName, expiry, nil)
+func (c *Client) StatObject(ctx context.Context, objectName string) (size int64, exists bool) {
+	info, err := c.client.StatObject(ctx, bucketName, objectName, minio.StatObjectOptions{})
 	if err != nil {
-		return "", err
+		return 0, false
 	}
-	return url.String(), nil
+	return info.Size, true
 }
 
-// ListObjects lista objetos com um prefixo específico.
 func (c *Client) ListObjects(ctx context.Context, prefix string) []string {
 	objectsCh := c.client.ListObjects(ctx, bucketName, minio.ListObjectsOptions{
 		Prefix:    prefix,
 		Recursive: true,
 	})
-
 	var objects []string
 	for obj := range objectsCh {
 		if obj.Err != nil {

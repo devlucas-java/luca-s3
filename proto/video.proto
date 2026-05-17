@@ -26,60 +26,163 @@ enum JobStatus {
 
 // ─── Transcode ────────────────────────────────────────────────────────────────
 
+// Example request:
+//   video_id:      "teste"
+//   original_path: "teste.mp4"
+//   resolutions:   [RESOLUTION_720P, RESOLUTION_480P, RESOLUTION_360P]
 message TranscodeVideoRequest {
-  string              video_id      = 1; // Video ID in MinIO
-  string              original_path = 2; // Path in MinIO: videos/{id}.mp4
-  repeated Resolution resolutions   = 3; // Desired resolutions
+  string              video_id      = 1;
+  string              original_path = 2;
+  repeated Resolution resolutions   = 3;
 }
 
+// Returns immediately — transcoding runs in background.
+// Example response:
+//   job_id:   "teste"
+//   video_id: "teste"
 message TranscodeVideoResponse {
   string job_id   = 1;
   string video_id = 2;
 }
 
-// ─── Job Status ───────────────────────────────────────────────────────────────
-
-message JobStatusRequest {
-  string job_id = 1;
-}
+// ─── Watch Job (server-streaming) ────────────────────────────────────────────
 
 message ResolutionProgress {
   Resolution resolution      = 1;
   JobStatus  status          = 2;
-  int32      last_segment    = 3; // Last processed segment
-  int32      total_segments  = 4; // Total expected segments
-  bool       thumbnail_done  = 5; // Whether thumbnail was generated
-  string     error           = 6;
+  int32      segments_done   = 3;
+  int32      total_segments  = 4;
+  int32      percent         = 5; // 0–100
+  bool       thumbnail_done  = 6;
+  string     error           = 7;
 }
 
+// Used by WatchJob and ListJobs responses.
+// Example:
+//   job_id:           "teste"
+//   video_id:         "teste"
+//   status:           JOB_STATUS_DONE
+//   overall_percent:  100
+//   original_width:   1280
+//   original_height:  720
+//   duration_seconds: 45.7
+//   progress: [
+//     { resolution: RESOLUTION_720P, status: JOB_STATUS_DONE, segments_done: 23, total_segments: 23, percent: 100, thumbnail_done: true },
+//     { resolution: RESOLUTION_480P, status: JOB_STATUS_DONE, segments_done: 23, total_segments: 23, percent: 100, thumbnail_done: true },
+//   ]
 message JobStatusResponse {
   string                      job_id           = 1;
   string                      video_id         = 2;
   JobStatus                   status           = 3;
   repeated ResolutionProgress progress         = 4;
-  int32                       original_width   = 5;
-  int32                       original_height  = 6;
-  double                      duration_seconds = 7;
+  int32                       overall_percent  = 5;
+  int32                       original_width   = 6;
+  int32                       original_height  = 7;
+  double                      duration_seconds = 8;
+  string                      created_at       = 9;
+  string                      updated_at       = 10;
+}
+
+// Streams JobStatusResponse until job finishes or client disconnects.
+// Example request:
+//   video_id:    "teste"
+//   interval_ms: 500
+message WatchJobRequest {
+  string video_id    = 1;
+  int32  interval_ms = 2; // polling interval, default 500ms, min 200ms, max 5000ms
+}
+
+// ─── List Jobs ────────────────────────────────────────────────────────────────
+
+// Example — list all jobs, first page:
+//   filter_status: JOB_STATUS_UNKNOWN  (= no filter, returns all)
+//   page:          1
+//   page_size:     20
+//
+// Example — list only done jobs, second page:
+//   filter_status: JOB_STATUS_DONE
+//   page:          2
+//   page_size:     10
+message ListJobsRequest {
+  JobStatus filter_status = 1; // JOB_STATUS_UNKNOWN = no filter (all statuses)
+  int32     page          = 2; // 1-indexed, values < 1 treated as 1
+  int32     page_size     = 3; // default 20, max 100, values <= 0 use default
+}
+
+// Example response:
+//   total:     4
+//   page:      1
+//   page_size: 20
+//   jobs:      [ ...JobStatusResponse... ]
+message ListJobsResponse {
+  repeated JobStatusResponse jobs      = 1;
+  int32                      total     = 2;
+  int32                      page      = 3;
+  int32                      page_size = 4;
 }
 
 // ─── HLS Manifest ─────────────────────────────────────────────────────────────
 
+// Example request:
+//   video_id: "teste"
 message GetHLSManifestRequest {
-  string video_id   = 1;
-  int32  expires_in = 2; // seconds, default 3600
+  string video_id = 1;
 }
 
+// Example response:
+//   url: "http://minio:9000/luca-s3/teste/hls/master.m3u8"
 message GetHLSManifestResponse {
-  string url        = 1;
-  int32  expires_in = 2;
+  string url = 1;
+}
+
+// ─── Inspect Video ────────────────────────────────────────────────────────────
+
+// Example request:
+//   video_id: "teste"
+message InspectVideoRequest {
+  string video_id = 1;
+}
+
+message ResolutionInfo {
+  Resolution resolution    = 1;
+  int32      segment_count = 2;
+  bool       has_playlist  = 3;
+  bool       has_thumbnail = 4;
+  int64      size_bytes    = 5;
+}
+
+// Example response:
+//   video_id:         "teste"
+//   found:            true
+//   original_path:    "teste.mp4"
+//   original_size:    52428800
+//   has_master:       true
+//   total_size_bytes: 78643200
+//   resolutions: [
+//     { resolution: RESOLUTION_720P, segment_count: 23, has_playlist: true, has_thumbnail: true, size_bytes: 31457280 },
+//     { resolution: RESOLUTION_480P, segment_count: 23, has_playlist: true, has_thumbnail: true, size_bytes: 20971520 },
+//   ]
+message InspectVideoResponse {
+  string                  video_id         = 1;
+  bool                    found            = 2;
+  string                  original_path    = 3;
+  int64                   original_size    = 4;
+  bool                    has_master       = 5;
+  repeated ResolutionInfo resolutions      = 6;
+  int64                   total_size_bytes = 7;
 }
 
 // ─── Delete Video ─────────────────────────────────────────────────────────────
 
+// Example request:
+//   video_id: "teste"
 message DeleteVideoRequest {
   string video_id = 1;
 }
 
+// Example response:
+//   success: true
+//   message: "video teste and all related files deleted"
 message DeleteVideoResponse {
   bool   success = 1;
   string message = 2;
@@ -88,15 +191,21 @@ message DeleteVideoResponse {
 // ─── Service ──────────────────────────────────────────────────────────────────
 
 service VideoService {
-  // Start HLS transcoding for a video in MinIO
+  // Start HLS transcoding — returns immediately, runs in background.
   rpc TranscodeVideo(TranscodeVideoRequest) returns (TranscodeVideoResponse);
 
-  // Query job status
-  rpc GetJobStatus(JobStatusRequest) returns (JobStatusResponse);
+  // Server-streaming: real-time progress until job finishes or client disconnects.
+  rpc WatchJob(WatchJobRequest) returns (stream JobStatusResponse);
 
-  // Get HLS master playlist URL
+  // Paginated list of cached jobs with optional status filter.
+  rpc ListJobs(ListJobsRequest) returns (ListJobsResponse);
+
+  // Get direct public URL for the HLS master playlist (no expiry).
   rpc GetHLSManifest(GetHLSManifestRequest) returns (GetHLSManifestResponse);
 
-  // Delete video and all related files from MinIO
+  // Scan MinIO and return a full report of what exists for a video_id.
+  rpc InspectVideo(InspectVideoRequest) returns (InspectVideoResponse);
+
+  // Delete video and all related files from MinIO + job from Redis.
   rpc DeleteVideo(DeleteVideoRequest) returns (DeleteVideoResponse);
 }

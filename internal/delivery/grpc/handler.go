@@ -3,6 +3,7 @@ package grpc
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/devlucas-java/luca-s3/internal/application/service"
@@ -16,17 +17,18 @@ import (
 type Handler struct {
 	pb.UnimplementedVideoServiceServer
 	transcodeService *service.TranscodeService
+	inspectService   *service.InspectService
 	minio            *minioclient.Client
 }
 
-func NewHandler(transcodeService *service.TranscodeService, minio *minioclient.Client) *Handler {
+func NewHandler(transcodeService *service.TranscodeService, inspectService *service.InspectService, minio *minioclient.Client) *Handler {
 	return &Handler{
 		transcodeService: transcodeService,
+		inspectService:   inspectService,
 		minio:            minio,
 	}
 }
 
-// TranscodeVideo inicia transcodificação HLS para um vídeo no MinIO.
 func (h *Handler) TranscodeVideo(ctx context.Context, req *pb.TranscodeVideoRequest) (*pb.TranscodeVideoResponse, error) {
 	if req.VideoId == "" {
 		return nil, status.Error(codes.InvalidArgument, "video_id is required")
@@ -45,7 +47,15 @@ func (h *Handler) TranscodeVideo(ctx context.Context, req *pb.TranscodeVideoRequ
 
 	job, err := h.transcodeService.TranscodeVideo(ctx, req.VideoId, req.OriginalPath, resolutions)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "transcode: %v", err)
+		msg := err.Error()
+		switch {
+		case containsAny(msg, "not found in minio", "no files"):
+			return nil, status.Errorf(codes.NotFound, "%v", err)
+		case containsAny(msg, "already has an active job"):
+			return nil, status.Errorf(codes.AlreadyExists, "%v", err)
+		default:
+			return nil, status.Errorf(codes.Internal, "transcode: %v", err)
+		}
 	}
 
 	return &pb.TranscodeVideoResponse{
@@ -54,46 +64,81 @@ func (h *Handler) TranscodeVideo(ctx context.Context, req *pb.TranscodeVideoRequ
 	}, nil
 }
 
-// GetJobStatus retorna o status de um job.
-func (h *Handler) GetJobStatus(ctx context.Context, req *pb.JobStatusRequest) (*pb.JobStatusResponse, error) {
-	job, err := h.transcodeService.GetJob(ctx, req.JobId)
-	if err != nil {
-		return nil, status.Errorf(codes.NotFound, "job not found: %v", err)
+func (h *Handler) WatchJob(req *pb.WatchJobRequest, stream pb.VideoService_WatchJobServer) error {
+	if req.VideoId == "" {
+		return status.Error(codes.InvalidArgument, "video_id is required")
 	}
 
-	progress := make([]*pb.ResolutionProgress, len(job.Progress))
-	for i, p := range job.Progress {
-		progress[i] = &pb.ResolutionProgress{
-			Resolution:    resolutionToProto(p.Resolution),
-			Status:        jobStatusToProto(p.Status),
-			LastSegment:   int32(p.LastSegment),
-			TotalSegments: int32(p.TotalSegments),
-			ThumbnailDone: p.ThumbnailDone,
-			Error:         p.Error,
+	interval := time.Duration(req.IntervalMs) * time.Millisecond
+	if interval < 200*time.Millisecond || interval > 5*time.Second {
+		interval = 500 * time.Millisecond
+	}
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-stream.Context().Done():
+			return nil
+		case <-ticker.C:
+			job, err := h.transcodeService.GetJob(stream.Context(), req.VideoId)
+			if err != nil {
+				return status.Errorf(codes.NotFound, "no job found for video: %v", err)
+			}
+
+			if err := stream.Send(jobToProto(job)); err != nil {
+				return err
+			}
+
+			if job.Status == enums.JobStatusDone || job.Status == enums.JobStatusFailed {
+				return nil
+			}
 		}
 	}
+}
 
-	return &pb.JobStatusResponse{
-		JobId:           job.ID,
-		VideoId:         job.VideoID,
-		Status:          jobStatusToProto(job.Status),
-		Progress:        progress,
-		OriginalWidth:   int32(job.OriginalWidth),
-		OriginalHeight:  int32(job.OriginalHeight),
-		DurationSeconds: job.DurationSeconds,
+func (h *Handler) ListJobs(ctx context.Context, req *pb.ListJobsRequest) (*pb.ListJobsResponse, error) {
+	page := int(req.Page)
+	pageSize := int(req.PageSize)
+
+	if page < 1 {
+		page = 1
+	}
+	if pageSize <= 0 {
+		pageSize = 20
+	}
+	if pageSize > 100 {
+		pageSize = 100
+	}
+
+	filterStatus := protoToJobStatus(req.FilterStatus)
+
+	jobs, total, err := h.transcodeService.ListJobs(ctx, filterStatus, page, pageSize)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "list jobs: %v", err)
+	}
+
+	items := make([]*pb.JobStatusResponse, len(jobs))
+	for i, j := range jobs {
+		items[i] = jobToProto(j)
+	}
+
+	return &pb.ListJobsResponse{
+		Jobs:     items,
+		Total:    int32(total),
+		Page:     int32(page),
+		PageSize: int32(pageSize),
 	}, nil
 }
 
-// GetHLSManifest retorna a URL do master playlist HLS.
 func (h *Handler) GetHLSManifest(ctx context.Context, req *pb.GetHLSManifestRequest) (*pb.GetHLSManifestResponse, error) {
-	expiry := time.Duration(req.ExpiresIn) * time.Second
-	if expiry == 0 {
-		expiry = 1 * time.Hour
+	if req.VideoId == "" {
+		return nil, status.Error(codes.InvalidArgument, "video_id is required")
 	}
 
-	manifestPath := fmt.Sprintf("videos/%s/hls/master.m3u8", req.VideoId)
+	manifestPath := fmt.Sprintf("%s/hls/master.m3u8", req.VideoId)
 
-	// Verifica se existe
 	exists, err := h.minio.ObjectExists(ctx, manifestPath)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "check manifest: %v", err)
@@ -102,83 +147,76 @@ func (h *Handler) GetHLSManifest(ctx context.Context, req *pb.GetHLSManifestRequ
 		return nil, status.Errorf(codes.NotFound, "HLS manifest not found for video: %s", req.VideoId)
 	}
 
-	url, err := h.minio.PresignedURL(ctx, manifestPath, expiry)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "presigned url: %v", err)
-	}
-
 	return &pb.GetHLSManifestResponse{
-		Url:       url,
-		ExpiresIn: int32(expiry.Seconds()),
+		Url: h.minio.PublicURL(manifestPath),
 	}, nil
 }
 
-// DeleteVideo deletes all video files from MinIO and related jobs.
+// InspectVideo scans MinIO and returns a full report of what exists for a video.
+func (h *Handler) InspectVideo(ctx context.Context, req *pb.InspectVideoRequest) (*pb.InspectVideoResponse, error) {
+	if req.VideoId == "" {
+		return nil, status.Error(codes.InvalidArgument, "video_id is required")
+	}
+
+	info, err := h.inspectService.InspectVideo(ctx, req.VideoId)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "inspect: %v", err)
+	}
+	if !info.Found {
+		return nil, status.Errorf(codes.NotFound, "no files found in MinIO for video_id %q", req.VideoId)
+	}
+
+	resInfos := make([]*pb.ResolutionInfo, len(info.Resolutions))
+	for i, r := range info.Resolutions {
+		resInfos[i] = &pb.ResolutionInfo{
+			Resolution:   resolutionToProto(r.Resolution),
+			SegmentCount: int32(r.SegmentCount),
+			HasPlaylist:  r.HasPlaylist,
+			HasThumbnail: r.HasThumbnail,
+			SizeBytes:    r.SizeBytes,
+		}
+	}
+
+	return &pb.InspectVideoResponse{
+		VideoId:        info.VideoID,
+		Found:          info.Found,
+		OriginalPath:   info.OriginalPath,
+		OriginalSize:   info.OriginalSize,
+		HasMaster:      info.HasMaster,
+		Resolutions:    resInfos,
+		TotalSizeBytes: info.TotalSizeBytes,
+	}, nil
+}
+
 func (h *Handler) DeleteVideo(ctx context.Context, req *pb.DeleteVideoRequest) (*pb.DeleteVideoResponse, error) {
+	if req.VideoId == "" {
+		return nil, status.Error(codes.InvalidArgument, "video_id is required")
+	}
+
 	if err := h.transcodeService.DeleteVideo(ctx, req.VideoId); err != nil {
-		return &pb.DeleteVideoResponse{
-			Success: false,
-			Message: err.Error(),
-		}, nil
+		// Map known error types to proper gRPC codes
+		msg := err.Error()
+		switch {
+		case containsAny(msg, "not found", "no files"):
+			return nil, status.Errorf(codes.NotFound, "%v", err)
+		case containsAny(msg, "currently processing", "currently pending"):
+			return nil, status.Errorf(codes.FailedPrecondition, "%v", err)
+		default:
+			return nil, status.Errorf(codes.Internal, "%v", err)
+		}
 	}
 
 	return &pb.DeleteVideoResponse{
 		Success: true,
-		Message: fmt.Sprintf("video %s deleted", req.VideoId),
+		Message: fmt.Sprintf("video %s and all related files deleted", req.VideoId),
 	}, nil
 }
 
-// ─── Conversores ─────────────────────────────────────────────────────────────
-
-func protoToResolution(res pb.Resolution) enums.Resolution {
-	switch res {
-	case pb.Resolution_RESOLUTION_360P:
-		return enums.RESOLUTION_360P
-	case pb.Resolution_RESOLUTION_480P:
-		return enums.RESOLUTION_480P
-	case pb.Resolution_RESOLUTION_720P:
-		return enums.RESOLUTION_720P
-	case pb.Resolution_RESOLUTION_1080P:
-		return enums.RESOLUTION_1080P
-	case pb.Resolution_RESOLUTION_1440P:
-		return enums.RESOLUTION_1440P
-	case pb.Resolution_RESOLUTION_4K:
-		return enums.RESOLUTION_4K
-	default:
-		return ""
+func containsAny(s string, subs ...string) bool {
+	for _, sub := range subs {
+		if strings.Contains(s, sub) {
+			return true
+		}
 	}
-}
-
-func resolutionToProto(res enums.Resolution) pb.Resolution {
-	switch res {
-	case enums.RESOLUTION_360P:
-		return pb.Resolution_RESOLUTION_360P
-	case enums.RESOLUTION_480P:
-		return pb.Resolution_RESOLUTION_480P
-	case enums.RESOLUTION_720P:
-		return pb.Resolution_RESOLUTION_720P
-	case enums.RESOLUTION_1080P:
-		return pb.Resolution_RESOLUTION_1080P
-	case enums.RESOLUTION_1440P:
-		return pb.Resolution_RESOLUTION_1440P
-	case enums.RESOLUTION_4K:
-		return pb.Resolution_RESOLUTION_4K
-	default:
-		return pb.Resolution_RESOLUTION_UNKNOWN
-	}
-}
-
-func jobStatusToProto(status enums.JobStatus) pb.JobStatus {
-	switch status {
-	case enums.JobStatusPending:
-		return pb.JobStatus_JOB_STATUS_PENDING
-	case enums.JobStatusProcessing:
-		return pb.JobStatus_JOB_STATUS_PROCESSING
-	case enums.JobStatusDone:
-		return pb.JobStatus_JOB_STATUS_DONE
-	case enums.JobStatusFailed:
-		return pb.JobStatus_JOB_STATUS_FAILED
-	default:
-		return pb.JobStatus_JOB_STATUS_UNKNOWN
-	}
+	return false
 }

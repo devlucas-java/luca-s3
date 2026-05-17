@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>360° HLS Player — Luca-S3</title>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.7/dist/hls.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: system-ui, sans-serif;
+      background: #0f0f0f;
+      color: #e0e0e0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem 1rem;
+      gap: 1.5rem;
+    }
+
+    h1 { font-size: 1.4rem; font-weight: 600; color: #fff; }
+
+    .card {
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 12px;
+      padding: 1.5rem;
+      width: 100%;
+      max-width: 900px;
+    }
+
+    .card label {
+      display: block;
+      font-size: 0.8rem;
+      color: #888;
+      margin-bottom: 0.4rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .input-row { display: flex; gap: 0.5rem; }
+
+    input[type="text"] {
+      flex: 1;
+      background: #111;
+      border: 1px solid #333;
+      border-radius: 8px;
+      color: #e0e0e0;
+      font-size: 0.9rem;
+      padding: 0.6rem 0.9rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    input[type="text"]:focus { border-color: #555; }
+
+    button {
+      background: #2563eb;
+      border: none;
+      border-radius: 8px;
+      color: #fff;
+      cursor: pointer;
+      font-size: 0.9rem;
+      font-weight: 500;
+      padding: 0.6rem 1.2rem;
+      transition: background 0.2s;
+      white-space: nowrap;
+    }
+    button:hover { background: #1d4ed8; }
+
+    .presets { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.6rem; }
+    .preset-btn {
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 6px;
+      color: #888;
+      cursor: pointer;
+      font-size: 0.75rem;
+      padding: 0.25rem 0.6rem;
+      transition: all 0.15s;
+    }
+    .preset-btn:hover { border-color: #444; color: #ccc; }
+
+    .status {
+      font-size: 0.82rem;
+      padding: 0.5rem 0.8rem;
+      border-radius: 6px;
+      margin-top: 0.8rem;
+    }
+    .status.info    { background: #1e3a5f; color: #93c5fd; }
+    .status.success { background: #14532d; color: #86efac; }
+    .status.error   { background: #450a0a; color: #fca5a5; }
+    .status.hidden  { display: none; }
+
+    #canvasWrapper {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 16/9;
+      background: #000;
+      border-radius: 8px;
+      overflow: hidden;
+      cursor: grab;
+      user-select: none;
+      touch-action: none;
+    }
+    #canvasWrapper:active { cursor: grabbing; }
+
+    #threeCanvas { width: 100% !important; height: 100% !important; display: block; }
+
+    video#hlsVideo { display: none; }
+
+    .overlay-controls {
+      position: absolute;
+      bottom: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: rgba(0,0,0,0.65);
+      border-radius: 99px;
+      padding: 0.4rem 0.9rem;
+      backdrop-filter: blur(8px);
+      white-space: nowrap;
+    }
+
+    .ov-btn {
+      background: transparent;
+      border: none;
+      color: #fff;
+      cursor: pointer;
+      font-size: 1.1rem;
+      padding: 0.2rem 0.35rem;
+      border-radius: 6px;
+      transition: background 0.15s;
+      line-height: 1;
+    }
+    .ov-btn:hover { background: rgba(255,255,255,0.15); }
+
+    #seekBar, #volSlider {
+      -webkit-appearance: none;
+      appearance: none;
+      height: 4px;
+      background: #555;
+      border-radius: 99px;
+      outline: none;
+      cursor: pointer;
+    }
+    #seekBar { width: 160px; }
+    #volSlider { width: 55px; }
+    #seekBar::-webkit-slider-thumb,
+    #volSlider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 12px; height: 12px;
+      border-radius: 50%;
+      background: #fff;
+      cursor: pointer;
+    }
+
+    #timeDisplay { font-size: 0.72rem; color: #bbb; min-width: 78px; text-align: center; }
+
+    .hint {
+      position: absolute;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.6);
+      color: #ccc;
+      font-size: 0.72rem;
+      padding: 0.25rem 0.8rem;
+      border-radius: 99px;
+      pointer-events: none;
+      transition: opacity 0.5s;
+    }
+
+    .fov-row { display: flex; align-items: center; gap: 0.8rem; margin-top: 0.8rem; }
+    .fov-row label { font-size: 0.8rem; color: #888; white-space: nowrap; }
+    #fovSlider {
+      flex: 1;
+      -webkit-appearance: none;
+      appearance: none;
+      height: 4px;
+      background: #333;
+      border-radius: 99px;
+      outline: none;
+      cursor: pointer;
+    }
+    #fovSlider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px; height: 14px;
+      border-radius: 50%;
+      background: #2563eb;
+      cursor: pointer;
+    }
+    #fovValue { font-size: 0.8rem; color: #888; min-width: 36px; text-align: right; }
+
+    .levels { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.8rem; }
+    .level-btn {
+      background: #222;
+      border: 1px solid #333;
+      border-radius: 6px;
+      color: #aaa;
+      cursor: pointer;
+      font-size: 0.78rem;
+      padding: 0.3rem 0.7rem;
+      transition: all 0.15s;
+    }
+    .level-btn:hover  { border-color: #555; color: #fff; }
+    .level-btn.active { background: #2563eb; border-color: #2563eb; color: #fff; }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      gap: 0.6rem;
+      margin-top: 0.8rem;
+    }
+    .stat { background: #111; border: 1px solid #222; border-radius: 8px; padding: 0.6rem 0.8rem; }
+    .stat .label { font-size: 0.72rem; color: #666; text-transform: uppercase; }
+    .stat .value { font-size: 1rem; font-weight: 600; color: #e0e0e0; margin-top: 0.2rem; }
+  </style>
+</head>
+<body>
+
+<h1>🌐 360° HLS Player — Luca-S3</h1>
+
+<div class="card">
+  <label>HLS Manifest URL (.m3u8) — equirectangular 360°</label>
+  <div class="input-row">
+    <input type="text" id="urlInput" placeholder="http://localhost:9000/luca-s3/{id}/hls/master.m3u8" />
+    <button onclick="loadStream()">Load</button>
+  </div>
+    <div class="presets">
+      <span style="font-size:0.75rem;color:#555;align-self:center;">
+        Presets:
+      </span>
+
+      <!-- Local -->
+      <button class="preset-btn"
+        onclick="setPreset('http://localhost:9000/luca-s3/teste360/hls/master.m3u8')">
+        localhost test
+      </button>
+
+      <!-- Bitmovin VR -->
+      <button class="preset-btn"
+        onclick="setPreset('https://bitmovin-a.akamaihd.net/content/playhouse-vr/m3u8s/105560.m3u8')">
+        Bitmovin VR
+      </button>
+
+      <!-- Samsung 360 -->
+      <button class="preset-btn"
+        onclick="setPreset('https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8')">
+        Samsung Demo
+      </button>
+
+      <!-- Wowza VR -->
+      <button class="preset-btn"
+        onclick="setPreset('https://wowzaec2demo.streamlock.net/live/bigbuckbunny/playlist.m3u8')">
+        Wowza Bunny
+      </button>
+
+      <!-- Apple -->
+      <button class="preset-btn"
+        onclick="setPreset('https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_16x9/bipbop_16x9_variant.m3u8')">
+        Apple HLS
+      </button>
+
+      <!-- Akamai -->
+      <button class="preset-btn"
+        onclick="setPreset('https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8')">
+        Akamai Live
+      </button>
+
+      <!-- Sintel -->
+      <button class="preset-btn"
+        onclick="setPreset('https://bitdash-a.akamaihd.net/content/sintel/hls/playlist.m3u8')">
+        Sintel
+      </button>
+
+      <!-- NASA -->
+      <button class="preset-btn"
+        onclick="setPreset('https://nasatv-lh.akamaihd.net/i/NASA_101@319270/master.m3u8')">
+        NASA Live
+      </button>
+
+      <!-- Blender -->
+      <button class="preset-btn"
+        onclick="setPreset('https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8')">
+        Blender Demo
+      </button>
+
+      <!-- Big Buck Bunny -->
+      <button class="preset-btn"
+        onclick="setPreset('https://test-streams.mux.dev/bbb-360p.m3u8')">
+        BBB 360p
+      </button>
+    </div>
+  <div id="status" class="status hidden"></div>
+</div>
+
+<div class="card">
+  <div id="canvasWrapper">
+    <canvas id="threeCanvas"></canvas>
+    <video id="hlsVideo" crossorigin="anonymous" playsinline muted></video>
+    <div class="hint" id="hint">🖱 Drag to look around</div>
+    <div class="overlay-controls">
+      <button class="ov-btn" id="playBtn" onclick="togglePlay()">▶</button>
+      <input type="range" id="seekBar" min="0" max="100" value="0" step="0.1" oninput="seek(this.value)" />
+      <span id="timeDisplay">0:00 / 0:00</span>
+      <button class="ov-btn" id="muteBtn" onclick="toggleMute()">�</button>
+      <input type="range" id="volSlider" min="0" max="1" step="0.05" value="1" oninput="setVolume(this.value)" />
+      <button class="ov-btn" onclick="resetCamera()" title="Reset view">⟳</button>
+      <button class="ov-btn" onclick="goFullscreen()" title="Fullscreen">⛶</button>
+    </div>
+  </div>
+
+  <div class="fov-row">
+    <label>Field of View</label>
+    <input type="range" id="fovSlider" min="40" max="120" value="75" oninput="setFov(this.value)" />
+    <span id="fovValue">75°</span>
+  </div>
+
+  <div id="levelsContainer" style="display:none">
+    <label style="margin-top:1rem">Quality</label>
+    <div class="levels" id="levels"></div>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="label">Resolution</div><div class="value" id="statRes">—</div></div>
+    <div class="stat"><div class="label">Bitrate</div><div class="value" id="statBitrate">—</div></div>
+    <div class="stat"><div class="label">Buffer</div><div class="value" id="statBuffer">—</div></div>
+    <div class="stat"><div class="label">Dropped</div><div class="value" id="statDropped">—</div></div>
+  </div>
+</div>
+
+<script>
+  // ── Three.js setup ──────────────────────────────────────────────────────────
+  const canvas  = document.getElementById('threeCanvas');
+  const wrapper = document.getElementById('canvasWrapper');
+  const video   = document.getElementById('hlsVideo');
+
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+  const scene  = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(75, 16 / 9, 0.1, 1000);
+
+  // Sphere with BackSide so the texture renders on the inside
+  const geo = new THREE.SphereGeometry(500, 64, 32);
+  const tex = new THREE.VideoTexture(video);
+  // Use encoding compatible with Three.js r160
+  if (THREE.SRGBColorSpace !== undefined) {
+    tex.colorSpace = THREE.SRGBColorSpace;
+  } else {
+    tex.encoding = THREE.sRGBEncoding;
+  }
+  const mat    = new THREE.MeshBasicMaterial({ map: tex, side: THREE.BackSide });
+  const sphere = new THREE.Mesh(geo, mat);
+  scene.add(sphere);
+
+  function syncSize() {
+    const w = wrapper.clientWidth;
+    const h = wrapper.clientHeight;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+  }
+  syncSize();
+  new ResizeObserver(syncSize).observe(wrapper);
+
+  // ── Camera control ──────────────────────────────────────────────────────────
+  let lon = 0, lat = 0;
+  let dragging = false, px = 0, py = 0;
+
+  wrapper.addEventListener('mousedown',  e => { dragging = true;  px = e.clientX; py = e.clientY; });
+  window.addEventListener('mouseup',    ()  => { dragging = false; });
+  window.addEventListener('mousemove',  e  => {
+    if (!dragging) return;
+    lon -= (e.clientX - px) * 0.25;
+    lat  = Math.max(-85, Math.min(85, lat + (e.clientY - py) * 0.25));
+    px = e.clientX; py = e.clientY;
+  });
+
+  wrapper.addEventListener('touchstart', e => {
+    dragging = true; px = e.touches[0].clientX; py = e.touches[0].clientY;
+  }, { passive: true });
+  window.addEventListener('touchend',   () => { dragging = false; });
+  window.addEventListener('touchmove',  e => {
+    if (!dragging) return;
+    lon -= (e.touches[0].clientX - px) * 0.25;
+    lat  = Math.max(-85, Math.min(85, lat + (e.touches[0].clientY - py) * 0.25));
+    px = e.touches[0].clientX; py = e.touches[0].clientY;
+  }, { passive: true });
+
+  wrapper.addEventListener('wheel', e => {
+    e.preventDefault();
+    const sl = document.getElementById('fovSlider');
+    const v  = Math.max(40, Math.min(120, parseFloat(sl.value) + e.deltaY * 0.05));
+    sl.value = v;
+    setFov(v);
+  }, { passive: false });
+
+  // Gyroscope
+  if (window.DeviceOrientationEvent) {
+    window.addEventListener('deviceorientation', e => {
+      if (e.alpha == null) return;
+      lon = e.alpha;
+      lat = Math.max(-85, Math.min(85, e.beta - 90));
+      document.getElementById('hint').textContent = '📱 Move your device to look around';
+    });
+  }
+
+  function applyCamera() {
+    const phi   = THREE.MathUtils.degToRad(90 - lat);
+    const theta = THREE.MathUtils.degToRad(lon);
+    camera.lookAt(
+      500 * Math.sin(phi) * Math.cos(theta),
+      500 * Math.cos(phi),
+      500 * Math.sin(phi) * Math.sin(theta)
+    );
+  }
+
+  (function loop() {
+    requestAnimationFrame(loop);
+    if (video.readyState >= video.HAVE_CURRENT_DATA) tex.needsUpdate = true;
+    applyCamera();
+    renderer.render(scene, camera);
+  })();
+
+  // ── HLS loading ─────────────────────────────────────────────────────────────
+  let hls = null;
+
+  function setPreset(url) { document.getElementById('urlInput').value = url; }
+
+  function setStatus(msg, type) {
+    const el = document.getElementById('status');
+    el.textContent = msg;
+    el.className = 'status ' + type;
+  }
+
+  function loadStream() {
+    const url = document.getElementById('urlInput').value.trim();
+    if (!url) { setStatus('Enter a URL.', 'error'); return; }
+
+    if (hls) { hls.destroy(); hls = null; }
+    video.src = '';
+    setStatus('Loading…', 'info');
+
+    if (Hls.isSupported()) {
+      hls = new Hls({
+        enableWorker: true,
+        xhrSetup: xhr => {
+          // Allow cross-origin requests
+          xhr.withCredentials = false;
+        },
+      });
+      hls.loadSource(url);
+      hls.attachMedia(video);
+
+      hls.on(Hls.Events.MANIFEST_PARSED, (_, data) => {
+        setStatus(`✅ Manifest loaded — ${data.levels.length} level(s)`, 'success');
+        buildLevels(data.levels);
+        // Must unmute to allow autoplay in most browsers
+        video.muted = true;
+        video.play().then(() => {
+          document.getElementById('playBtn').textContent = '⏸';
+          document.getElementById('muteBtn').textContent = '🔇';
+          fadeHint();
+        }).catch(err => setStatus(`⚠️ Autoplay blocked: click ▶ to start`, 'info'));
+      });
+
+      hls.on(Hls.Events.LEVEL_SWITCHED, (_, data) => {
+        const lv = hls.levels[data.level];
+        if (lv) {
+          document.getElementById('statRes').textContent    = `${lv.width}×${lv.height}`;
+          document.getElementById('statBitrate').textContent = `${(lv.bitrate / 1000).toFixed(0)} kbps`;
+        }
+        markLevel(data.level);
+      });
+
+      hls.on(Hls.Events.ERROR, (_, data) => {
+        if (data.fatal) setStatus(`❌ ${data.type}: ${data.details}`, 'error');
+      });
+
+    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      video.src = url;
+      video.addEventListener('loadedmetadata', () => {
+        setStatus('✅ Loaded (native HLS)', 'success');
+        video.muted = true;
+        video.play().then(() => {
+          document.getElementById('playBtn').textContent = '⏸';
+          fadeHint();
+        });
+      }, { once: true });
+    } else {
+      setStatus('❌ HLS not supported in this browser.', 'error');
+    }
+
+    startStats();
+  }
+
+  function fadeHint() {
+    const h = document.getElementById('hint');
+    h.style.opacity = '0';
+    setTimeout(() => h.style.display = 'none', 600);
+  }
+
+  // ── Playback controls ───────────────────────────────────────────────────────
+  function togglePlay() {
+    if (video.paused) {
+      video.play();
+      document.getElementById('playBtn').textContent = '⏸';
+    } else {
+      video.pause();
+      document.getElementById('playBtn').textContent = '▶';
+    }
+  }
+
+  function seek(v) {
+    if (video.duration) video.currentTime = (v / 100) * video.duration;
+  }
+
+  function toggleMute() {
+    video.muted = !video.muted;
+    document.getElementById('muteBtn').textContent = video.muted ? '🔇' : '🔊';
+    document.getElementById('volSlider').value = video.muted ? 0 : video.volume;
+  }
+
+  function setVolume(v) {
+    video.volume = v;
+    video.muted  = v == 0;
+    document.getElementById('muteBtn').textContent = v == 0 ? '🔇' : '🔊';
+  }
+
+  function resetCamera() { lon = 0; lat = 0; }
+
+  function goFullscreen() {
+    (wrapper.requestFullscreen || wrapper.webkitRequestFullscreen).call(wrapper);
+  }
+
+  function setFov(v) {
+    camera.fov = parseFloat(v);
+    camera.updateProjectionMatrix();
+    document.getElementById('fovValue').textContent = Math.round(v) + '°';
+  }
+
+  video.addEventListener('timeupdate', () => {
+    if (!video.duration) return;
+    document.getElementById('seekBar').value = (video.currentTime / video.duration) * 100;
+    document.getElementById('timeDisplay').textContent = `${fmt(video.currentTime)} / ${fmt(video.duration)}`;
+  });
+
+  function fmt(s) {
+    return `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+  }
+
+  // ── Quality levels ──────────────────────────────────────────────────────────
+  function buildLevels(levels) {
+    const wrap = document.getElementById('levelsContainer');
+    const el   = document.getElementById('levels');
+    el.innerHTML = '';
+    wrap.style.display = 'block';
+
+    const auto = Object.assign(document.createElement('button'), {
+      className: 'level-btn active', id: 'level-auto', textContent: 'Auto',
+      onclick: () => { hls.currentLevel = -1; markLevel(-1); },
+    });
+    el.appendChild(auto);
+
+    levels.forEach((lv, i) => {
+      const btn = Object.assign(document.createElement('button'), {
+        className: 'level-btn', id: `level-${i}`, textContent: `${lv.height}p`,
+        onclick: () => { hls.currentLevel = i; markLevel(i); },
+      });
+      el.appendChild(btn);
+    });
+  }
+
+  function markLevel(idx) {
+    document.querySelectorAll('.level-btn').forEach(b => b.classList.remove('active'));
+    const btn = document.getElementById(idx === -1 ? 'level-auto' : `level-${idx}`);
+    if (btn) btn.classList.add('active');
+  }
+
+  // ── Stats ───────────────────────────────────────────────────────────────────
+  function startStats() {
+    setInterval(() => {
+      if (video.buffered.length) {
+        const buf = video.buffered.end(video.buffered.length - 1) - video.currentTime;
+        document.getElementById('statBuffer').textContent = `${buf.toFixed(1)}s`;
+      }
+      if (video.getVideoPlaybackQuality) {
+        document.getElementById('statDropped').textContent =
+          video.getVideoPlaybackQuality().droppedVideoFrames;
+      }
+    }, 1000);
+  }
+
+  document.getElementById('urlInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') loadStream();
+  });
+</script>
+
+</body>
+</html>

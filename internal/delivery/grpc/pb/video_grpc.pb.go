@@ -20,8 +20,10 @@ const _ = grpc.SupportPackageIsVersion9
 
 const (
 	VideoService_TranscodeVideo_FullMethodName = "/video.VideoService/TranscodeVideo"
-	VideoService_GetJobStatus_FullMethodName   = "/video.VideoService/GetJobStatus"
+	VideoService_WatchJob_FullMethodName       = "/video.VideoService/WatchJob"
+	VideoService_ListJobs_FullMethodName       = "/video.VideoService/ListJobs"
 	VideoService_GetHLSManifest_FullMethodName = "/video.VideoService/GetHLSManifest"
+	VideoService_InspectVideo_FullMethodName   = "/video.VideoService/InspectVideo"
 	VideoService_DeleteVideo_FullMethodName    = "/video.VideoService/DeleteVideo"
 )
 
@@ -29,13 +31,17 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type VideoServiceClient interface {
-	// Start HLS transcoding for a video in MinIO
+	// Start HLS transcoding — returns immediately, runs in background.
 	TranscodeVideo(ctx context.Context, in *TranscodeVideoRequest, opts ...grpc.CallOption) (*TranscodeVideoResponse, error)
-	// Query job status
-	GetJobStatus(ctx context.Context, in *JobStatusRequest, opts ...grpc.CallOption) (*JobStatusResponse, error)
-	// Get HLS master playlist URL
+	// Server-streaming: real-time progress until job finishes or client disconnects.
+	WatchJob(ctx context.Context, in *WatchJobRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[JobStatusResponse], error)
+	// Paginated list of cached jobs with optional status filter.
+	ListJobs(ctx context.Context, in *ListJobsRequest, opts ...grpc.CallOption) (*ListJobsResponse, error)
+	// Get direct public URL for the HLS master playlist (no expiry).
 	GetHLSManifest(ctx context.Context, in *GetHLSManifestRequest, opts ...grpc.CallOption) (*GetHLSManifestResponse, error)
-	// Delete video and all related files from MinIO
+	// Scan MinIO and return a full report of what exists for a video_id.
+	InspectVideo(ctx context.Context, in *InspectVideoRequest, opts ...grpc.CallOption) (*InspectVideoResponse, error)
+	// Delete video and all related files from MinIO + job from Redis.
 	DeleteVideo(ctx context.Context, in *DeleteVideoRequest, opts ...grpc.CallOption) (*DeleteVideoResponse, error)
 }
 
@@ -57,10 +63,29 @@ func (c *videoServiceClient) TranscodeVideo(ctx context.Context, in *TranscodeVi
 	return out, nil
 }
 
-func (c *videoServiceClient) GetJobStatus(ctx context.Context, in *JobStatusRequest, opts ...grpc.CallOption) (*JobStatusResponse, error) {
+func (c *videoServiceClient) WatchJob(ctx context.Context, in *WatchJobRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[JobStatusResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(JobStatusResponse)
-	err := c.cc.Invoke(ctx, VideoService_GetJobStatus_FullMethodName, in, out, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &VideoService_ServiceDesc.Streams[0], VideoService_WatchJob_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[WatchJobRequest, JobStatusResponse]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type VideoService_WatchJobClient = grpc.ServerStreamingClient[JobStatusResponse]
+
+func (c *videoServiceClient) ListJobs(ctx context.Context, in *ListJobsRequest, opts ...grpc.CallOption) (*ListJobsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListJobsResponse)
+	err := c.cc.Invoke(ctx, VideoService_ListJobs_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -71,6 +96,16 @@ func (c *videoServiceClient) GetHLSManifest(ctx context.Context, in *GetHLSManif
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetHLSManifestResponse)
 	err := c.cc.Invoke(ctx, VideoService_GetHLSManifest_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *videoServiceClient) InspectVideo(ctx context.Context, in *InspectVideoRequest, opts ...grpc.CallOption) (*InspectVideoResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(InspectVideoResponse)
+	err := c.cc.Invoke(ctx, VideoService_InspectVideo_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -91,13 +126,17 @@ func (c *videoServiceClient) DeleteVideo(ctx context.Context, in *DeleteVideoReq
 // All implementations must embed UnimplementedVideoServiceServer
 // for forward compatibility.
 type VideoServiceServer interface {
-	// Start HLS transcoding for a video in MinIO
+	// Start HLS transcoding — returns immediately, runs in background.
 	TranscodeVideo(context.Context, *TranscodeVideoRequest) (*TranscodeVideoResponse, error)
-	// Query job status
-	GetJobStatus(context.Context, *JobStatusRequest) (*JobStatusResponse, error)
-	// Get HLS master playlist URL
+	// Server-streaming: real-time progress until job finishes or client disconnects.
+	WatchJob(*WatchJobRequest, grpc.ServerStreamingServer[JobStatusResponse]) error
+	// Paginated list of cached jobs with optional status filter.
+	ListJobs(context.Context, *ListJobsRequest) (*ListJobsResponse, error)
+	// Get direct public URL for the HLS master playlist (no expiry).
 	GetHLSManifest(context.Context, *GetHLSManifestRequest) (*GetHLSManifestResponse, error)
-	// Delete video and all related files from MinIO
+	// Scan MinIO and return a full report of what exists for a video_id.
+	InspectVideo(context.Context, *InspectVideoRequest) (*InspectVideoResponse, error)
+	// Delete video and all related files from MinIO + job from Redis.
 	DeleteVideo(context.Context, *DeleteVideoRequest) (*DeleteVideoResponse, error)
 	mustEmbedUnimplementedVideoServiceServer()
 }
@@ -112,11 +151,17 @@ type UnimplementedVideoServiceServer struct{}
 func (UnimplementedVideoServiceServer) TranscodeVideo(context.Context, *TranscodeVideoRequest) (*TranscodeVideoResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method TranscodeVideo not implemented")
 }
-func (UnimplementedVideoServiceServer) GetJobStatus(context.Context, *JobStatusRequest) (*JobStatusResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method GetJobStatus not implemented")
+func (UnimplementedVideoServiceServer) WatchJob(*WatchJobRequest, grpc.ServerStreamingServer[JobStatusResponse]) error {
+	return status.Error(codes.Unimplemented, "method WatchJob not implemented")
+}
+func (UnimplementedVideoServiceServer) ListJobs(context.Context, *ListJobsRequest) (*ListJobsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListJobs not implemented")
 }
 func (UnimplementedVideoServiceServer) GetHLSManifest(context.Context, *GetHLSManifestRequest) (*GetHLSManifestResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetHLSManifest not implemented")
+}
+func (UnimplementedVideoServiceServer) InspectVideo(context.Context, *InspectVideoRequest) (*InspectVideoResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method InspectVideo not implemented")
 }
 func (UnimplementedVideoServiceServer) DeleteVideo(context.Context, *DeleteVideoRequest) (*DeleteVideoResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method DeleteVideo not implemented")
@@ -160,20 +205,31 @@ func _VideoService_TranscodeVideo_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
-func _VideoService_GetJobStatus_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(JobStatusRequest)
+func _VideoService_WatchJob_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(WatchJobRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(VideoServiceServer).WatchJob(m, &grpc.GenericServerStream[WatchJobRequest, JobStatusResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type VideoService_WatchJobServer = grpc.ServerStreamingServer[JobStatusResponse]
+
+func _VideoService_ListJobs_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListJobsRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(VideoServiceServer).GetJobStatus(ctx, in)
+		return srv.(VideoServiceServer).ListJobs(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: VideoService_GetJobStatus_FullMethodName,
+		FullMethod: VideoService_ListJobs_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(VideoServiceServer).GetJobStatus(ctx, req.(*JobStatusRequest))
+		return srv.(VideoServiceServer).ListJobs(ctx, req.(*ListJobsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -192,6 +248,24 @@ func _VideoService_GetHLSManifest_Handler(srv interface{}, ctx context.Context, 
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(VideoServiceServer).GetHLSManifest(ctx, req.(*GetHLSManifestRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _VideoService_InspectVideo_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(InspectVideoRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(VideoServiceServer).InspectVideo(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: VideoService_InspectVideo_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(VideoServiceServer).InspectVideo(ctx, req.(*InspectVideoRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -226,18 +300,28 @@ var VideoService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _VideoService_TranscodeVideo_Handler,
 		},
 		{
-			MethodName: "GetJobStatus",
-			Handler:    _VideoService_GetJobStatus_Handler,
+			MethodName: "ListJobs",
+			Handler:    _VideoService_ListJobs_Handler,
 		},
 		{
 			MethodName: "GetHLSManifest",
 			Handler:    _VideoService_GetHLSManifest_Handler,
 		},
 		{
+			MethodName: "InspectVideo",
+			Handler:    _VideoService_InspectVideo_Handler,
+		},
+		{
 			MethodName: "DeleteVideo",
 			Handler:    _VideoService_DeleteVideo_Handler,
 		},
 	},
-	Streams:  []grpc.StreamDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "WatchJob",
+			Handler:       _VideoService_WatchJob_Handler,
+			ServerStreams: true,
+		},
+	},
 	Metadata: "proto/video.proto",
 }
